@@ -95,13 +95,15 @@ def run_dynamic_backtest(
     all_trades: list[dict[str, Any]] = []
     all_signals: list[dict[str, Any]] = []
     candidate_diagnostics: list[dict[str, Any]] = []
-    skipped = Counter()
+    skipped = Counter()  # Counts skipped signal sessions, once per day.
+    candidate_rejections = Counter()  # Counts per-contract risk/cash/exposure rejections.
     days_processed = 0
     cash = initial_cash
 
     for day, day_index in sorted(by_day.items()):
         candidates = []
         daily_signal: dict[str, Any] | None = None
+        day_rejection_reasons: list[str] = []
         for spec in contract_specs:
             rows = [r for r in contract_rows[spec["symbol"]] if r["timestamp"].date().isoformat() == day]
             if not rows:
@@ -162,7 +164,8 @@ def run_dynamic_backtest(
                 })
             else:
                 reason = signal.get("skip_reason") or "not_eligible"
-                skipped[reason] += 1
+                candidate_rejections[reason] += 1
+                day_rejection_reasons.append(reason)
                 candidate_diagnostics.append({
                     "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
                     "expiry": spec["expiry"], "status": "REJECTED", "reason": reason,
@@ -191,7 +194,13 @@ def run_dynamic_backtest(
         elif daily_signal is not None:
             signal = dict(daily_signal)
             signal["status"] = "SKIPPED"
-            signal.setdefault("skip_reason", "no_eligible_contract")
+            # One signal session is counted once, even when many contracts are rejected.
+            if day_rejection_reasons:
+                session_reason = Counter(day_rejection_reasons).most_common(1)[0][0]
+            else:
+                session_reason = "no_eligible_contract"
+            signal["skip_reason"] = session_reason
+            skipped[session_reason] += 1
             all_signals.append(signal)
         else:
             all_signals.append({
@@ -217,6 +226,8 @@ def run_dynamic_backtest(
         "no_signal_days": sum(s["status"] == "NO_SIGNAL" for s in all_signals),
         "skipped_signals": sum(s["status"] == "SKIPPED" for s in all_signals),
         "skipped_reasons": dict(sorted(skipped.items())),
+        "candidate_rejections": sum(candidate_rejections.values()),
+        "candidate_rejection_reasons": dict(sorted(candidate_rejections.items())),
         "trading_days_processed": len(by_day), "days_with_trades": days_processed,
         "gross_pnl_before_costs": gross_pnl, "slippage_cost_total": total_slippage,
         "trading_charges_total": total_costs,
