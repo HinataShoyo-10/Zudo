@@ -158,16 +158,17 @@ def run_dynamic_backtest(
             index_close = float(signal["index_close_at_signal"])
             strike_distance = abs(float(spec["strike"]) - index_close)
             one_lot_premium = entry_premium * int(spec["lot_size"]) if entry_premium is not None else None
-            if result["trades"] and entry_row is not None:
-                trade = result["trades"][0]
-                brain_config = BrainConfig(
-                    capital=cash, risk_fraction=risk_fraction,
-                    hard_risk_fraction=hard_risk_fraction,
-                    max_exposure_fraction=max_exposure_fraction,
-                    stop_loss_fraction=stop_loss_pct,
-                    slippage_bps_per_side=slippage_bps,
-                    require_liquidity_data=require_liquidity_data,
-                )
+            brain_config = BrainConfig(
+                capital=cash, risk_fraction=risk_fraction,
+                hard_risk_fraction=hard_risk_fraction,
+                max_exposure_fraction=max_exposure_fraction,
+                stop_loss_fraction=stop_loss_pct,
+                slippage_bps_per_side=slippage_bps,
+                require_liquidity_data=require_liquidity_data,
+                cost_rates=rates,
+            )
+            assessment = None
+            if entry_row is not None and entry_premium is not None:
                 assessment = assess_candidate(OptionCandidate(
                     symbol=spec["symbol"], strike=float(spec["strike"]),
                     entry_premium=entry_premium, lot_size=int(spec["lot_size"]),
@@ -177,13 +178,17 @@ def run_dynamic_backtest(
                     volume=float(entry_row["volume"]) if entry_row.get("volume") not in (None, "") else None,
                     timestamp_aligned=True, data_valid=True,
                 ), brain_config)
-                if not assessment.eligible:
+
+            if result["trades"] and entry_row is not None:
+                trade = result["trades"][0]
+                if assessment is not None and not assessment.eligible:
                     reason = ";".join(assessment.reasons)
                     candidate_rejections[reason] += 1
                     day_rejection_reasons.append(reason)
                     candidate_diagnostics.append({
                         "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
                         "expiry": spec["expiry"], "status": "REJECTED", "reason": reason,
+                        "backtest_status": "TRADE_SIMULATED_BUT_BRAIN_REJECTED",
                         "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
                         "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
                         "planned_risk": trade["planned_risk"], "strike_distance": strike_distance,
@@ -198,19 +203,27 @@ def run_dynamic_backtest(
                     "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
                     "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
                     "planned_risk": trade["planned_risk"], "strike_distance": strike_distance,
-                    "brain_estimated_stop_risk": assessment.estimated_stop_risk,
-                    "brain_warnings": ";".join(assessment.warnings),
+                    "brain_estimated_stop_risk": assessment.estimated_stop_risk if assessment else "",
+                    "brain_warnings": ";".join(assessment.warnings) if assessment else "",
                 })
             else:
-                reason = signal.get("skip_reason") or "not_eligible"
+                backtest_reason = signal.get("skip_reason") or "not_eligible"
+                brain_reasons = list(assessment.reasons) if assessment is not None else []
+                reasons = list(dict.fromkeys([backtest_reason, *brain_reasons]))
+                reason = ";".join(reasons)
                 candidate_rejections[reason] += 1
                 day_rejection_reasons.append(reason)
                 candidate_diagnostics.append({
                     "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
                     "expiry": spec["expiry"], "status": "REJECTED", "reason": reason,
+                    "backtest_reason": backtest_reason,
                     "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
                     "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
                     "planned_risk": signal.get("planned_risk", ""), "strike_distance": strike_distance,
+                    "brain_eligible": assessment.eligible if assessment else "",
+                    "brain_reasons": ";".join(assessment.reasons) if assessment else "",
+                    "brain_estimated_stop_risk": assessment.estimated_stop_risk if assessment else "",
+                    "brain_warnings": ";".join(assessment.warnings) if assessment else "",
                 })
 
         if candidates:
