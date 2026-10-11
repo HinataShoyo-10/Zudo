@@ -21,6 +21,7 @@ class BrainConfig:
     slippage_bps_per_side: float = 5.0
     max_spread_fraction: float = 0.03
     min_volume: float = 1.0
+    require_liquidity_data: bool = True
 
     def validate(self) -> None:
         if not isfinite(self.capital) or self.capital <= 0:
@@ -62,6 +63,7 @@ class CandidateAssessment:
     one_lot_exposure: float | None
     estimated_stop_risk: float | None
     strike_distance: float | None
+    warnings: tuple[str, ...] = ()
 
 
 def assess_candidate(candidate: OptionCandidate, config: BrainConfig) -> CandidateAssessment:
@@ -82,8 +84,12 @@ def assess_candidate(candidate: OptionCandidate, config: BrainConfig) -> Candida
     if not candidate.data_valid:
         reasons.append("invalid_market_data")
 
+    warnings: list[str] = []
     if candidate.bid is None or candidate.ask is None:
-        reasons.append("missing_bid_ask")
+        if config.require_liquidity_data:
+            reasons.append("missing_bid_ask")
+        else:
+            warnings.append("liquidity_unverified_missing_bid_ask")
     elif (not isfinite(candidate.bid) or not isfinite(candidate.ask)
           or candidate.bid <= 0 or candidate.ask < candidate.bid):
         reasons.append("invalid_bid_ask")
@@ -117,7 +123,7 @@ def assess_candidate(candidate: OptionCandidate, config: BrainConfig) -> Candida
 
     return CandidateAssessment(
         candidate.symbol, not reasons, tuple(reasons), entry, exposure, risk,
-        abs(candidate.strike - candidate.index_price),
+        abs(candidate.strike - candidate.index_price), tuple(warnings),
     )
 
 
