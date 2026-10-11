@@ -142,3 +142,32 @@ def test_loader_rejects_bad_ohlc_and_accepts_zero_volume(tmp_path: Path):
     )
     with pytest.raises(ValueError, match="high violates"):
         load_candles(path)
+
+
+
+def test_premium_exposure_cap_skips_oversized_lot():
+    index_rows, option_rows = make_day()
+    result = run_backtest(
+        index_rows,
+        option_rows,
+        option_symbol="NSE:NIFTY2510923600CE",
+        lot_size=75,
+        initial_cash=100_000,
+        risk_fraction=0.005,
+        hard_risk_fraction=0.01,
+        stop_loss_pct=0.20,
+        max_exposure_fraction=0.05,
+    )
+    assert result["summary"]["trades"] == 0
+    assert result["summary"]["skipped_reasons"]["one_lot_exceeds_exposure_limit"] == 1
+    assert result["summary"]["max_exposure_fraction"] == pytest.approx(0.05)
+
+
+def test_cli_help_does_not_raise_argparse_format_error(monkeypatch):
+    import sys
+    from src.options_backtest import main
+
+    monkeypatch.setattr(sys, "argv", ["options_backtest", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
