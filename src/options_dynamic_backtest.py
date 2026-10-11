@@ -21,7 +21,9 @@ from src.options_backtest import CostRates, load_candles, run_backtest, parse_ti
 
 
 def _strike_from_symbol(symbol: str) -> float:
-    match = re.search(r"(\d{5,6})(?:CE|PE)$", symbol.upper())
+    # FYERS NIFTY symbols encode the 5-digit expiry token before the strike,
+    # e.g. NSE:NIFTY2510923600CE -> expiry token 25109, strike 23600.
+    match = re.search(r"NIFTY\d{5}(\d{5,6})(?:CE|PE)$", symbol.upper())
     if not match:
         raise ValueError(f"Cannot infer strike from option symbol {symbol!r}; specify strike in manifest")
     return float(match.group(1))
@@ -157,7 +159,6 @@ def run_dynamic_backtest(
     total_costs = sum(float(t["trading_charges"]) for t in all_trades)
     total_slippage = sum(float(t["slippage_cost"]) for t in all_trades)
     wins = [t for t in all_trades if float(t["net_pnl"]) > 0]
-    losses = [t for t in all_trades if float(t["net_pnl"]) < 0]
     gross_losses = -sum(min(0.0, float(t["net_pnl"])) for t in all_trades)
     summary = {
         "strategy": "NIFTY 30-minute opening-range breakout; dynamically selected nearest-ATM eligible call",
