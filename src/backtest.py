@@ -119,16 +119,18 @@ def run_backtest(
 
     for i, bar in enumerate(bars):
         # Execute only a signal produced by the previous candle's close.
-        if pending == "BUY" and position is None:
-            entry_price = bar.open * (1.0 + slip)
-            position = {
-                "entry_time": bar.timestamp.isoformat(),
-                "entry_price": entry_price,
-                "quantity": quantity,
-            }
+        if pending == "BUY":
+            if position is None:
+                entry_price = bar.open * (1.0 + slip)
+                position = {
+                    "entry_time": bar.timestamp.isoformat(),
+                    "entry_price": entry_price,
+                    "quantity": quantity,
+                }
             pending = None
-        elif pending == "SELL" and position is not None:
-            exit_price = bar.open * (1.0 - slip)
+        elif pending == "SELL":
+            if position is not None:
+                exit_price = bar.open * (1.0 - slip)
             entry_price = float(position["entry_price"])
             qty = int(position["quantity"])
             gross = (exit_price - entry_price) * qty
