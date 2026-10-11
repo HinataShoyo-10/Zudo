@@ -66,3 +66,23 @@ def test_manifest_requires_expiry(tmp_path: Path):
     }]}), encoding="utf-8")
     with pytest.raises(ValueError, match="specify expiry"):
         load_manifest(path)
+
+
+def test_skipped_signal_count_is_per_session_not_per_rejected_contract():
+    index_rows, option_rows = make_day()
+    specs = [
+        {"symbol": "NSE:NIFTY2510923600CE", "csv": Path("a.csv"), "lot_size": 75,
+         "strike": 103, "expiry": "2025-01-09", "option_type": "CE"},
+        {"symbol": "NSE:NIFTY2510923700CE", "csv": Path("b.csv"), "lot_size": 75,
+         "strike": 104, "expiry": "2025-01-09", "option_type": "CE"},
+    ]
+    expensive_rows = [dict(row, open=400.0, high=410.0, low=390.0, close=400.0) for row in option_rows]
+    result = run_dynamic_backtest(index_rows, specs, {
+        specs[0]["symbol"]: expensive_rows, specs[1]["symbol"]: expensive_rows,
+    }, initial_cash=100_000, risk_fraction=0.005, hard_risk_fraction=0.01,
+       max_exposure_fraction=0.20, rates=CostRates())
+    assert result["summary"]["signals"] == 1
+    assert result["summary"]["skipped_signals"] == 1
+    assert result["summary"]["candidate_rejections"] == 2
+    assert sum(result["summary"]["skipped_reasons"].values()) == 1
+    assert sum(result["summary"]["candidate_rejection_reasons"].values()) == 2
