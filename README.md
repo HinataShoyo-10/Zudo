@@ -73,14 +73,28 @@ The sample feed is synthetic. The live WebSocket adapter still needs validation 
 - `src/fyers_history.py`: standard historical OHLCV downloader
 - `src/fyers_expired_fno.py`: read-only expired F&O research data client
 - `src/validate_market_data.py`: one-command quality gate for the stock CSV and saved options API responses
-- `src/options_backtest.py`: research-only NIFTY opening-range breakout simulator for one specified call contract\n- `src/options_dynamic_backtest.py`: research-only dynamic nearest-ATM call selection across a supplied contract manifest
+- `src/options_backtest.py`: research-only NIFTY opening-range breakout simulator for one specified call contract\n- `src/options_dynamic_backtest.py`: research-only dynamic nearest-ATM call selection with deterministic brain gates
+- `src/nifty_validation.py`: repeatable NIFTY historical validation report and slippage/strict-liquidity stress scenarios
 - `docs/OPTIONS_DATA.md`: NIFTY expired-options data steps, limits, and safety notes
 - `docs/RESEARCH_ROADMAP.md`: project validation gates
 - `tests/`: unit tests
 
 ## Trading brain foundation
 
-See [docs/TRADING_BRAIN.md](docs/TRADING_BRAIN.md) for the proposed decision pipeline, hard safety gates, evaluation plan, and live-readiness criteria. The first deterministic candidate gate lives in `src/brain.py`; it rejects candidates with missing bid/ask or volume data, timestamp misalignment, excessive spread, or risk/exposure beyond configured limits. It is a foundation module and is **not yet integrated into the dynamic backtester**. Run `python -m pytest -q` to test the repository locally.
+See [docs/TRADING_BRAIN.md](docs/TRADING_BRAIN.md) for the deterministic decision pipeline and safety gates. The brain gates are integrated into the dynamic options backtester. OHLCV-only research explicitly flags missing bid/ask as liquidity-unverified; use strict mode when point-in-time quotes are available and required.
+
+### NIFTY historical validation and stress test
+
+After you have the local NIFTY index CSV and expired-options manifest, run the same strategy across multiple slippage assumptions and a strict quote-availability scenario:
+
+```bash
+python -m src.nifty_validation \
+  --index-csv data/fyers_expired/nifty_index_5m.csv \
+  --contracts-manifest data/fyers_expired/nifty_calls_manifest.json \
+  --out backtest_output_nifty_validation
+```
+
+Replace the index CSV path with the actual filename in your workspace. The manifest's option CSV paths are resolved relative to the manifest file. The report includes dataset coverage, per-scenario trades, P&L, and candidate diagnostics. It does not tune parameters or prove profitability. Outputs are ignored by Git.
 
 ## Safety and limitations
 
