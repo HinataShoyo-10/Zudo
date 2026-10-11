@@ -45,7 +45,7 @@ def test_load_bars_rejects_unsorted_timestamps(tmp_path):
 
 def test_backtest_runs_without_api_and_returns_metrics():
     # Trending then falling synthetic data should produce a closed trade.
-    closes = [100 + i for i in range(12)] + [111 - i * 2 for i in range(12)]
+    closes = [108 - i for i in range(8)] + [101 + i * 2 for i in range(12)] + [123 - i * 3 for i in range(12)]
     bars = make_bars(closes)
     trades, equity, metrics = run_backtest(
         bars, fast_period=2, slow_period=4, fee_per_side=0, slippage_bps=0
