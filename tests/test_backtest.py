@@ -44,7 +44,6 @@ def test_load_bars_rejects_unsorted_timestamps(tmp_path):
 
 
 def test_backtest_runs_without_api_and_returns_metrics():
-    # Trending then falling synthetic data should produce a closed trade.
     closes = [108 - i for i in range(8)] + [101 + i * 2 for i in range(12)] + [123 - i * 3 for i in range(12)]
     bars = make_bars(closes)
     trades, equity, metrics = run_backtest(
@@ -54,6 +53,37 @@ def test_backtest_runs_without_api_and_returns_metrics():
     assert metrics["trades"] >= 1
     assert metrics["final_equity"] == pytest.approx(100000 + metrics["net_pnl"])
     assert all(trade.quantity == 1 for trade in trades)
+    assert metrics["gross_pnl_before_costs"] == pytest.approx(sum(t.gross_pnl for t in trades))
+
+
+def test_intraday_mode_closes_positions_before_date_changes_and_separates_costs():
+    closes = [108 - i for i in range(8)] + [101 + i * 2 for i in range(12)] + [123 - i * 3 for i in range(12)]
+    bars = make_bars(closes)
+    # Split the synthetic series across two sessions while preserving order.
+    day_two_start = datetime.fromisoformat("2025-01-02T09:15:00+05:30")
+    for i in range(16, len(bars)):
+        old = bars[i]
+        bars[i] = Bar(
+            day_two_start + timedelta(minutes=5 * (i - 16)),
+            old.open, old.high, old.low, old.close, old.volume,
+        )
+
+    trades, _, metrics = run_backtest(
+        bars, fast_period=2, slow_period=4, fee_per_side=20, slippage_bps=5
+    )
+    assert all(
+        datetime.fromisoformat(t.entry_time).date() == datetime.fromisoformat(t.exit_time).date()
+        for t in trades
+    )
+    for trade in trades:
+        assert trade.fees == pytest.approx(40)
+        assert trade.slippage_cost >= 0
+        assert trade.net_pnl == pytest.approx(
+            trade.gross_pnl - trade.slippage_cost - trade.fees
+        )
+    assert metrics["fees_total"] == pytest.approx(sum(t.fees for t in trades))
+    assert metrics["slippage_cost_total"] == pytest.approx(sum(t.slippage_cost for t in trades))
+    assert metrics["final_equity"] == pytest.approx(100000 + metrics["net_pnl"])
 
 
 def test_invalid_ema_periods_raise():
