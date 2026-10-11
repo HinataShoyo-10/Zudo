@@ -50,7 +50,7 @@ def load_manifest(path: Path, base_dir: Path | None = None) -> list[dict[str, An
         lot_size = int(item.get("lot_size", 0))
         if lot_size <= 0:
             raise ValueError(f"{symbol}: lot_size must be positive")
-        strike = float(item.get("strike", _strike_from_symbol(symbol)))
+        strike_value = item.get("strike")\n        strike = float(strike_value) if strike_value is not None else _strike_from_symbol(symbol)
         expiry = str(item.get("expiry", ""))
         if not expiry:
             raise ValueError(f"{symbol}: specify expiry in manifest")
