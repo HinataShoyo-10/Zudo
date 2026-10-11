@@ -574,6 +574,7 @@ def run_backtest(
         "max_drawdown_pct": _max_drawdown_pct(equity_rows, initial_cash),
         "risk_fraction_target": risk_fraction,
         "hard_risk_fraction": hard_risk_fraction,
+        "max_exposure_fraction": max_exposure_fraction,
         "opening_range_minutes": opening_range_minutes,
         "stop_loss_pct_of_option_premium": stop_loss_pct * 100.0,
         "take_profit_r": target_r,
