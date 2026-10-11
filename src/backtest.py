@@ -190,7 +190,12 @@ def run_backtest(
         ))
         realized_pnl += net
         position = None
-        equity_curve[-1]["equity"] = initial_cash + realized_pnl
+        final_marked_equity = initial_cash + realized_pnl
+        equity_curve[-1]["equity"] = final_marked_equity
+        final_peak = max(peak_equity, final_marked_equity)
+        final_drawdown = (final_peak - final_marked_equity) / final_peak if final_peak else 0.0
+        equity_curve[-1]["drawdown_pct"] = final_drawdown * 100.0
+        max_drawdown = max(max_drawdown, final_drawdown)
 
     wins = sum(1 for trade in trades if trade.net_pnl > 0)
     gross_profit = sum(trade.net_pnl for trade in trades if trade.net_pnl > 0)
@@ -203,7 +208,7 @@ def run_backtest(
         "return_pct": (realized_pnl / initial_cash) * 100.0,
         "trades": len(trades),
         "win_rate_pct": (wins / len(trades) * 100.0) if trades else 0.0,
-        "profit_factor": (gross_profit / gross_loss) if gross_loss > 0 else (None if gross_profit == 0 else float("inf")),
+        "profit_factor": (gross_profit / gross_loss) if gross_loss > 0 else None,
         "max_drawdown_pct": max_drawdown * 100.0,
         "fee_per_side": fee_per_side,
         "slippage_bps_per_side": slippage_bps,
