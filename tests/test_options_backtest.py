@@ -69,7 +69,7 @@ def test_risk_limit_skips_one_lot_that_exceeds_500_target():
 
 
 def test_next_candle_entry_and_intrabar_target_exit():
-    index_rows, option_rows = make_day({
+    index_rows, option_rows = make_day(option_entry_bar={
         "open": 100.0, "high": 140.0, "low": 90.0, "close": 130.0
     })
     result = run_backtest(
