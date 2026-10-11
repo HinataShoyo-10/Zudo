@@ -1,16 +1,16 @@
 # Zudo — Indian Intraday Market Data & Backtesting
 
-FYERS API v3 market-data starter plus an **offline backtester**. No order-placement code is included.
+FYERS API v3 market-data starter plus an offline backtester and a read-only expired F&O data research pipeline. No order-placement code is included.
 
 ## Does backtesting require the FYERS API?
 
-**No.** The backtester reads local historical OHLCV CSV files and does not import or authenticate with FYERS. You can code and run it entirely in GitHub Codespaces. FYERS API is optional if you want to download historical candles programmatically; it is needed for this repository's live FYERS feed.
+**No.** The stock backtester reads local historical OHLCV CSV files. FYERS API is optional if you want to download historical candles programmatically.
 
 ## Requirements
 
 - Python 3.11+
-- FYERS API v3 app and valid access token only for live market data
-- Historical OHLCV CSV file for offline backtests
+- FYERS API v3 app and valid access token for FYERS market data
+- Historical OHLCV data for offline research
 
 ## Install
 
@@ -25,78 +25,61 @@ cp .env.example .env
 
 ## Offline backtesting (no API/token required)
 
-The CSV must contain these columns: `timestamp,open,high,low,close,volume`. Timestamps should be ISO-8601; timestamps without a timezone are treated as India Standard Time (IST). Rows must be in strictly increasing timestamp order. Use real historical candles from a source you are authorized to use; the backtester does not download data.
+The CSV must contain `timestamp,open,high,low,close,volume`. Timestamps should be ISO-8601; timestamps without a timezone are treated as IST. Rows must be strictly increasing with no duplicates.
 
 ```bash
-# Smoke-test with included synthetic data (not real market data)
 python -m src.backtest --csv data/example_ohlcv.csv
-
-# Run against your own historical candles
 python -m src.backtest --csv data/your_candles.csv
 ```
 
-Defaults: long-only 9/21 EMA crossover, quantity 1, starting equity ₹100,000, estimated ₹20 fee per side, and 5 basis points slippage per side. These cost assumptions are configurable and are only rough placeholders, not a complete representation of all Indian market charges. Signals are calculated on candle close and filled at the next candle open; any open position is liquidated at the last candle close at the end of the test.
+The included `data/example_ohlcv.csv` is synthetic and is only a software smoke test. It is not real market data or evidence of profitability.
 
-Example with custom settings:
+Default strategy: long-only 9/21 EMA crossover, quantity 1, ₹100,000 starting equity, ₹20 estimated fee per side, and 5 basis points slippage per side. These are rough placeholders, not a complete representation of Indian market charges. Default backtests now enforce intraday session exits; output reports gross P&L, fees, slippage, net win rate, and drawdown separately.
 
 ```bash
 python -m src.backtest --csv data/your_candles.csv --fast 5 --slow 20 --quantity 1 --cash 100000 --fee-per-side 20 --slippage-bps 5 --out backtest_output
 ```
 
-Output directory contains:
-- `trades.csv`: entry/exit prices and trade P&L after estimated costs
-- `equity_curve.csv`: per-candle marked-to-market equity and drawdown
-- `summary.json`: net P&L, return, trade count, win rate, profit factor and maximum drawdown
+Output contains `trades.csv`, `equity_curve.csv`, and `summary.json`. Before interpreting results, validate real charges, slippage, liquidity, timestamps, session boundaries, and out-of-sample performance. Results do not guarantee future returns.
 
-The included `data/example_ohlcv.csv` is synthetic and exists only to smoke-test the command; it is not real market data or evidence of strategy profitability. Before relying on results, validate data quality, corporate actions, instrument selection, realistic charges, slippage, liquidity, intraday square-off rules, and out-of-sample performance. Results do not guarantee future returns.
+## Download real historical stock candles from FYERS
 
-## Sample mode (live-data pipeline smoke test)
-
-```bash
-python -m src.main --source sample
-```
-
-Synthetic sample ticks are for testing code only; they are not market data.
-
-## FYERS live mode
-
-Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` in a local `.env` file and confirm symbols in `config/watchlist.txt`. Then run:
-
-```bash
-python -m src.main --source fyers
-```
-
-Never commit or share credentials. The current WebSocket adapter needs validation against actual FYERS callback payloads and your account before unattended use.
-
-## Download real historical candles from FYERS
-
-Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` in your local, untracked `.env` file. Then download candles (example: SBIN five-minute bars for January 2025):
+Keep `.env` ignored by Git. Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` locally:
 
 ```bash
 python -m src.fyers_history --symbol NSE:SBIN-EQ --resolution 5 --from-date 2025-01-01 --to-date 2025-01-31 --out data/sbin_5m.csv
 ```
 
-The downloader splits requests into bounded date ranges, converts Unix timestamps to ISO-8601 with the India Standard Time offset, validates OHLC values, sorts rows, removes duplicate timestamps, and writes the same CSV format consumed by the offline backtester. It only calls the history endpoint; it never places orders. Verify the returned symbol, dates, candle count, and timestamps before using the file for research. API limits and availability can change; consult the [official FYERS History API documentation](https://support.fyers.in/portal/en/kb/articles/how-can-i-get-historical-data-for-a-symbol-over-a-specific-date-range-using-the-history-api).
+The downloader uses the history endpoint only and never places orders.
 
-Do not commit `.env`, downloaded account-specific data, or access tokens.
+## NIFTY expired options data (read-only research)
+
+Use the separate documented workflow in [docs/OPTIONS_DATA.md](docs/OPTIONS_DATA.md). It uses FYERS' expired F&O endpoints to query expiry dates, list actual returned contract symbols, and download one contract's raw historical response. We intentionally save raw JSON until the current response schema has been inspected and tested.
+
+FYERS' current documentation says Standard API access has a limited daily allowance for intraday expired F&O historical requests. Check the current plan limits before collecting data; do not bulk-loop through every strike. Source: [FYERS API rate limits](https://support.fyers.in/portal/en/kb/articles/what-are-the-fyers-api-rate-limits-for-standard-and-prime-plans).
+
+## FYERS live market-data feed
+
+```bash
+python -m src.main --source sample
+python -m src.main --source fyers
+```
+
+The sample feed is synthetic. The live WebSocket adapter still needs validation against actual FYERS callbacks before unattended use. Do not enable live trading.
 
 ## Layout
 
-- `src/models.py`: timezone-aware Tick and Candle types
-- `src/candles.py`: five-minute OHLC candle aggregation
-- `src/feeds.py`: sample feed and FYERS WebSocket adapter
-- `src/indicators.py`: EMA and VWAP helpers
-- `src/backtest.py`: offline CSV backtesting engine
-- `src/fyers_history.py`: chunked FYERS history-to-CSV downloader
-- `src/main.py`: market-data command-line entry point
-- `tests/`: unit tests, including historical downloader tests
-- `config/watchlist.txt`: FYERS symbols
+- `src/backtest.py`: offline CSV backtester with intraday exits and cost reporting
+- `src/fyers_history.py`: standard historical OHLCV downloader
+- `src/fyers_expired_fno.py`: read-only expired F&O research data client
+- `docs/OPTIONS_DATA.md`: NIFTY expired-options data steps, limits, and safety notes
+- `docs/RESEARCH_ROADMAP.md`: project validation gates
+- `tests/`: unit tests
 
-## Known limitations
+## Safety and limitations
 
-- Backtester is long-only and uses a demonstration EMA crossover, not a validated trading strategy.
-- Estimated fees/slippage are simplified; taxes, exchange charges, STT, GST, stamp duty, spread, market impact and other costs may not be fully represented.
-- OHLC data cannot reveal the true order of intrabar price movements; this starter uses next-bar-open fills.
-- The live feed adapter has not been validated against actual account callback payloads.
-- Live adapter currently uses zero volume until interval-volume delta handling is validated. Do not use volume-based signals yet.
-- No orders are placed and no account state is changed.
+- The EMA crossover is only a baseline, not a validated strategy.
+- Historical OHLC data alone cannot reconstruct real bid/ask fills or exact intrabar stop order.
+- Costs must include all applicable brokerage and regulatory charges, not just a flat fee.
+- Planned risk per trade is not guaranteed maximum loss during gaps or poor fills.
+- No live orders are included in this project.
