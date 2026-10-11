@@ -168,3 +168,54 @@ Defaults are an estimate: FYERS options brokerage ₹20 per executed order; NSE 
 - NSE transaction-charge revision effective 1 October 2024: https://zerodha.com/marketintel/bulletin/391488/revision-in-transactions-charges-from-1st-october-2024
 
 One contract over six trading sessions is far too small to accept a strategy. OHLC candles do not establish executable bid/ask fills, and a planned stop is not a guaranteed maximum loss. This is a software/hypothesis-testing milestone, not evidence of an edge; no live orders are included.
+
+
+## Dynamic strike selection (new research prototype)
+
+The fixed-contract command above remains available. To avoid hardcoding one option symbol, use `src.options_dynamic_backtest` with a manifest of the contracts whose historical candles you have downloaded. The selector evaluates the same index breakout on each candidate contract, rejects contracts that fail the existing risk/cash/exposure gates, and chooses the eligible call whose strike is closest to the NIFTY index close at signal time. It does **not** choose by future P&L. This version is calls-only.
+
+Create `data/fyers_expired/nifty_calls_manifest.json` using only real symbols and CSV paths you actually downloaded. Example shape (replace every placeholder with your own files and exact returned contract metadata):
+
+```json
+{
+  "contracts": [
+    {
+      "symbol": "NSE:EXACT_CONTRACT_SYMBOL_1",
+      "csv": "nifty_call_1.csv",
+      "expiry": "YYYY-MM-DD",
+      "strike": 23600,
+      "lot_size": 75,
+      "option_type": "CE"
+    },
+    {
+      "symbol": "NSE:EXACT_CONTRACT_SYMBOL_2",
+      "csv": "nifty_call_2.csv",
+      "expiry": "YYYY-MM-DD",
+      "strike": 23700,
+      "lot_size": 75,
+      "option_type": "CE"
+    }
+  ]
+}
+```
+
+CSV paths are resolved relative to the manifest file. Each CSV must be the normalized five-minute OHLCV history for the symbol on that row. Supply contracts with overlapping trading dates; a contract is skipped on dates when its candles do not align exactly with the index data. Ensure each expiry and lot size is correct for the historical contract. Do not combine different contracts into one CSV unless each row retains its own symbol identity; the current manifest expects one CSV per symbol.
+
+Run:
+
+```bash
+python -m src.options_dynamic_backtest \\
+  --index-csv data/fyers_expired/nifty_index_5m_2025-01-02_to_09.csv \\
+  --contracts-manifest data/fyers_expired/nifty_calls_manifest.json \\
+  --initial-cash 100000 \\
+  --risk-fraction 0.005 \\
+  --hard-risk-fraction 0.01 \\
+  --max-exposure-fraction 0.20 \\
+  --opening-range-minutes 30 \\
+  --stop-loss-pct 0.20 \\
+  --target-r 1.5 \\
+  --slippage-bps-per-side 5 \\
+  --out backtest_output_dynamic
+```
+
+The dynamic output writes `summary.json`, `trades.csv`, and `signals.csv`. It still has important limits: the candidate universe is only as complete as your downloaded manifest; selection uses strike proximity and affordability, not bid/ask spread, open interest, or liquidity; and historical OHLC does not establish executable fills. Collect several strikes per expiry and multiple expiries if your data plan permits, but respect the FYERS expired-data request allowance. Never loosen the 0.5% target-risk / 1% hard-risk rules just to create trades. Research and paper testing only; no order endpoints are called.
