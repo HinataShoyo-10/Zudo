@@ -5,3 +5,7 @@ __pycache__/
 *.py[cod]
 logs/
 *.sqlite3
+backtest_output/
+# Keep the committed synthetic smoke-test file, but ignore downloaded market data.
+data/*.csv
+!data/example_ohlcv.csv
