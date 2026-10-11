@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 logs/
 *.sqlite3
+*.log
 backtest_output/
 backtest_output_*/
 # Keep the committed synthetic smoke-test file, but ignore downloaded market data.
