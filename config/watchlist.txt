@@ -1,0 +1,2 @@
+# One FYERS symbol per line; verify symbols against the current FYERS symbol master.
+NSE:SBIN-EQ
