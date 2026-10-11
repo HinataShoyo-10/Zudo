@@ -261,13 +261,14 @@ def _equity_curve(
     curve = []
     for row in timeline:
         ts = row["timestamp"]
+        # Set entry state first, then close it if entry/exit share a bar.
+        for trade in entries_by_ts.get(ts, []):
+            active = trade
         # Closed position P&L becomes realized at the exit timestamp.
         for trade in exits_by_ts.get(ts, []):
             realized += trade["net_pnl"]
             if active is trade:
                 active = None
-        for trade in entries_by_ts.get(ts, []):
-            active = trade
 
         unrealized_net = 0.0
         qty = 0
@@ -548,7 +549,7 @@ def run_backtest(
         "return_pct": (net_pnl / initial_cash * 100.0),
         "trades": len(trades),
         "signals": signal_count,
-        "skipped_signals": sum(skipped_reasons.values()),
+        "skipped_signals": sum(1 for signal in signals if signal["status"] == "SKIPPED"),
         "skipped_reasons": dict(sorted(skipped_reasons.items())),
         "trading_days_processed": processed_days,
         "gross_pnl_before_costs": gross_pnl,
