@@ -78,6 +78,10 @@ The sample feed is synthetic. The live WebSocket adapter still needs validation 
 - `docs/RESEARCH_ROADMAP.md`: project validation gates
 - `tests/`: unit tests
 
+## Trading brain foundation
+
+See [docs/TRADING_BRAIN.md](docs/TRADING_BRAIN.md) for the proposed decision pipeline, hard safety gates, evaluation plan, and live-readiness criteria. The first deterministic candidate gate lives in `src/brain.py`; it rejects candidates with missing bid/ask or volume data, timestamp misalignment, excessive spread, or risk/exposure beyond configured limits. It is a foundation module and is **not yet integrated into the dynamic backtester**. Run `python -m pytest -q` to test the repository locally.
+
 ## Safety and limitations
 
 - The EMA crossover is only a baseline, not a validated strategy.
