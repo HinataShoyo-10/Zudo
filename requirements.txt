@@ -2,4 +2,5 @@ fyers-apiv3>=3.1.0
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0
 streamlit>=1.40,<2.0
+pandas>=2.2,<3.0
 pytest>=8.0,<9.0

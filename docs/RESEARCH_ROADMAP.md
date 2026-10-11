@@ -4,10 +4,20 @@ This document is the project's decision gate from a market-data prototype toward
 
 ## Current state
 
-- Offline CSV backtester exists, using a demonstration long-only EMA crossover.
+- Offline CSV backtester supports the legacy long-only EMA crossover and a 5-minute opening-range breakout with ATR-based stops, risk/exposure sizing, conservative gap and intrabar collision handling, and intraday square-off.
+- ORB requires trend alignment, price above session VWAP, a minimum breakout distance and candle-body fraction, recent volume expansion, and a bounded opening range; each rejected breakout is reported in `no_trade_reasons`.
+- ORB currently assumes zero flat brokerage by default and 5 bps slippage per side; this deliberately does not model applicable taxes/regulatory charges or point-in-time executable quotes.
+- ORB rejects incomplete sessions rather than silently backtesting partial 5-minute data. Its rules remain a hypothesis, not a validated edge.
+- `src.paper_portfolio` provides an offline, multi-symbol cash-equity paper portfolio replay with shared capital, at most one position per session, setup-score tie-breaking, and an auditable skip/trade ledger. It is not a live paper-trading service and does not place broker orders.
+- `src.scanning.premarket` ranks up to 50 symbols using completed daily history only, excluding any daily candle dated today. It ranks trend, 5-/20-session momentum, previous-day relative volume, range position, and ATR; the score is not a probability of profit.
+- `src.scanning.fyers_workflow` fetches one symbol at a time with configurable pacing, writes auditable local histories, bounds watchlist size, and aborts ranking if any symbol's data is missing.
+- `src.scanning.opportunity` checks ORB and trend-pullback setups from latest completed 5-minute bars, exposes no-trade reasons and risk-sized paper estimates, and does not infer next-bar fills from future candles.
+- `src.dashboard.app` provides premarket ranking, shortlist-only after-open checks (manual or 5-minute refresh while the dashboard is open), and historical paper backtesting. It never places broker orders.
 - Synthetic candles are only a software smoke test, not market evidence.
+- Current workspace cash-equity coverage is limited to the local SBIN sample from January 2025; fresh FYERS multi-symbol histories are required for a current scan.
+- The bundled `config/watchlist.txt` is an editable 50-symbol starter universe, not a dynamically verified current NIFTY 50 list. Verify symbols/composition; failed data pulls are reported and prevent partial rankings.
 - FYERS historical candle downloader has been added; it must be run with the user's own credentials and its output manually audited.
-- The WebSocket adapter, volume aggregation, execution assumptions, and broker integration are not yet validated.
+- The WebSocket adapter, execution assumptions, and broker integration are not yet validated.
 - No live order placement should be enabled during research.
 
 ## Research sequence

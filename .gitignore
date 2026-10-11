@@ -12,3 +12,4 @@ backtest_output_*/
 data/*.csv
 !data/example_ohlcv.csv
 data/fyers_expired/
+data/scanner/

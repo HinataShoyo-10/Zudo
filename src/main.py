@@ -4,8 +4,8 @@ import os
 
 from dotenv import load_dotenv
 
-from src.candles import CandleBuilder
-from src.feeds import FyersTickSource, SampleTickSource, load_watchlist
+from src.data.candles import CandleBuilder
+from src.data.feeds import FyersTickSource, SampleTickSource, load_watchlist
 
 load_dotenv()
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
