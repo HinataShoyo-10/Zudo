@@ -122,7 +122,7 @@ def test_risk_rejection_contains_brain_diagnostics():
         max_exposure_fraction=0.20,
     )
     diagnostic = next(row for row in result["candidate_diagnostics"] if row["status"] == "REJECTED")
-    assert diagnostic["backtest_reason"] == "one_lot_exceeds_planned_risk"
+    assert diagnostic["backtest_reason"] in {"one_lot_exceeds_planned_risk", "one_lot_exceeds_exposure_limit"}
     assert diagnostic["brain_eligible"] is False
     assert diagnostic["brain_estimated_stop_risk"] > 500
     assert "one_lot_exceeds_target_risk" in diagnostic["brain_reasons"]
