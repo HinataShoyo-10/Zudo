@@ -68,7 +68,17 @@ python -m src.main --source fyers
 
 Never commit or share credentials. The current WebSocket adapter needs validation against actual FYERS callback payloads and your account before unattended use.
 
-FYERS's History API can also provide historical candles, but that is an optional data-acquisition step, separate from running the offline backtester. See the [FYERS Data API support docs](https://support.fyers.in/portal/en/kb/fyers-api-integrations/fyers-api/api-v3/data-api).
+## Download real historical candles from FYERS
+
+Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` in your local, untracked `.env` file. Then download candles (example: SBIN five-minute bars for January 2025):
+
+```bash
+python -m src.fyers_history --symbol NSE:SBIN-EQ --resolution 5 --from-date 2025-01-01 --to-date 2025-01-31 --out data/sbin_5m.csv
+```
+
+The downloader splits requests into bounded date ranges, converts Unix timestamps to ISO-8601 with the India Standard Time offset, validates OHLC values, sorts rows, removes duplicate timestamps, and writes the same CSV format consumed by the offline backtester. It only calls the history endpoint; it never places orders. Verify the returned symbol, dates, candle count, and timestamps before using the file for research. API limits and availability can change; consult the [official FYERS History API documentation](https://support.fyers.in/portal/en/kb/articles/how-can-i-get-historical-data-for-a-symbol-over-a-specific-date-range-using-the-history-api).
+
+Do not commit `.env`, downloaded account-specific data, or access tokens.
 
 ## Layout
 
@@ -77,8 +87,9 @@ FYERS's History API can also provide historical candles, but that is an optional
 - `src/feeds.py`: sample feed and FYERS WebSocket adapter
 - `src/indicators.py`: EMA and VWAP helpers
 - `src/backtest.py`: offline CSV backtesting engine
+- `src/fyers_history.py`: chunked FYERS history-to-CSV downloader
 - `src/main.py`: market-data command-line entry point
-- `tests/`: unit tests
+- `tests/`: unit tests, including historical downloader tests
 - `config/watchlist.txt`: FYERS symbols
 
 ## Known limitations
