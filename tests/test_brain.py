@@ -77,3 +77,23 @@ def test_no_trade_is_valid_result():
     )
     assert selected is None
     assert len(assessments) == 1
+
+
+
+def test_research_mode_warns_when_quotes_are_missing_but_does_not_fake_them():
+    result = assess_candidate(
+        candidate(bid=None, ask=None),
+        BrainConfig(require_liquidity_data=False),
+    )
+    assert result.eligible
+    assert result.warnings == ("liquidity_unverified_missing_bid_ask",)
+    assert result.reasons == ()
+
+
+def test_strict_mode_rejects_missing_quotes_even_if_volume_exists():
+    result = assess_candidate(
+        candidate(bid=None, ask=None),
+        BrainConfig(require_liquidity_data=True),
+    )
+    assert not result.eligible
+    assert "missing_bid_ask" in result.reasons
