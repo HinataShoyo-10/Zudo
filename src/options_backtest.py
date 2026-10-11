@@ -175,6 +175,7 @@ def _size_position(
     slippage_bps: float,
     stop_loss_pct: float,
     rates: CostRates,
+    max_exposure_fraction: float = 0.20,
 ) -> tuple[int, float, str]:
     target_budget = available_cash * risk_fraction
     hard_budget = available_cash * hard_risk_fraction
@@ -183,7 +184,8 @@ def _size_position(
     if stop_price <= 0:
         return 0, 0.0, "invalid_stop_price"
 
-    max_affordable_lots = int(available_cash // (entry_fill * lot_size))
+    exposure_budget = available_cash * max_exposure_fraction
+    max_affordable_lots = int(min(available_cash, exposure_budget) // (entry_fill * lot_size))
     chosen_lots = 0
     chosen_risk = 0.0
     chosen_entry_cost = 0.0
@@ -199,8 +201,10 @@ def _size_position(
             break
     if chosen_lots == 0:
         one_lot_risk, _ = _planned_risk(entry_fill, stop_price, lot_size, slippage_bps, rates)
-        if max_affordable_lots < 1 or entry_fill * lot_size > available_cash:
+        if entry_fill * lot_size > available_cash:
             return 0, one_lot_risk, "one_lot_exceeds_available_cash"
+        if entry_fill * lot_size > exposure_budget:
+            return 0, one_lot_risk, "one_lot_exceeds_exposure_limit"
         return 0, one_lot_risk, "one_lot_exceeds_planned_risk"
     return chosen_lots * lot_size, chosen_risk, ""
 
@@ -318,6 +322,7 @@ def run_backtest(
     max_entry_time: time = time(14, 30),
     slippage_bps: float = 5.0,
     rates: CostRates = CostRates(),
+    max_exposure_fraction: float = 0.20,
 ) -> dict[str, Any]:
     """Run one-call ORB prototype against synchronized 5-minute CSV rows."""
     if not option_symbol.strip():
@@ -330,6 +335,8 @@ def run_backtest(
         raise ValueError("opening_range_minutes must be a positive multiple of 5")
     if not (0 < stop_loss_pct < 1) or target_r <= 0:
         raise ValueError("stop_loss_pct must be between 0 and 1; target_r must be positive")
+    if not (0 < max_exposure_fraction <= 1):
+        raise ValueError("max_exposure_fraction must be in (0, 1]")
     if slippage_bps < 0 or rates.brokerage_per_order < 0:
         raise ValueError("cost and slippage assumptions cannot be negative")
 
@@ -424,7 +431,7 @@ def run_backtest(
             entry_fill = _entry_fill(raw_entry, slippage_bps)
             quantity, planned_risk, skip_reason = _size_position(
                 entry_fill, lot_size, cash, risk_fraction, hard_risk_fraction,
-                slippage_bps, stop_loss_pct, rates,
+                slippage_bps, stop_loss_pct, rates, max_exposure_fraction,
             )
             signal_item["planned_risk"] = planned_risk
             signal_item["quantity"] = quantity
@@ -624,6 +631,7 @@ def main() -> None:
     parser.add_argument("--initial-cash", type=float, default=100000.0)
     parser.add_argument("--risk-fraction", type=float, default=0.005, help="Target planned risk, default 0.5%%")
     parser.add_argument("--hard-risk-fraction", type=float, default=0.01, help="Hard planned-risk ceiling, max 1%%")
+    parser.add_argument("--max-exposure-fraction", type=float, default=0.20, help="Maximum premium exposure as a fraction of available cash, default 20%%")
     parser.add_argument("--opening-range-minutes", type=int, default=30)
     parser.add_argument("--stop-loss-pct", type=float, default=0.20, help="Stop distance as a fraction of entry option premium; default 20%%")
     parser.add_argument("--target-r", type=float, default=1.5, help="Target multiple of planned stop distance")
@@ -663,6 +671,7 @@ def main() -> None:
             max_entry_time=args.max_entry_time,
             slippage_bps=args.slippage_bps_per_side,
             rates=rates,
+            max_exposure_fraction=args.max_exposure_fraction,
         )
     except (OSError, ValueError, csv.Error) as exc:
         parser.error(str(exc))
