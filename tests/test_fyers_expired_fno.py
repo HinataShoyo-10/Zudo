@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from src.fyers_expired_fno import (\n    BASE_URL, FyersExpiredFnoClient, _validate_date_range,\n    normalize_historical_payload,\n)
+from src.fyers_expired_fno import (
+    BASE_URL, FyersExpiredFnoClient, _validate_date_range,
+    normalize_historical_payload,
+)
 
 
 class FakeResponse:
