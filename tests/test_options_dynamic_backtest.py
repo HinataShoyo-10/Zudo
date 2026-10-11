@@ -43,6 +43,9 @@ def test_dynamic_selector_chooses_nearest_strike_not_best_future_pnl():
     assert result["summary"]["trades"] == 1
     assert result["trades"][0]["option_symbol"] == specs[1]["symbol"]
     assert result["summary"]["research_only"] is True
+    assert len(result["candidate_diagnostics"]) == 2
+    assert all(row["status"] == "ELIGIBLE" for row in result["candidate_diagnostics"])
+    assert all("one_lot_premium" in row and "strike_distance" in row for row in result["candidate_diagnostics"])
 
 
 def test_manifest_resolves_relative_csv_paths_and_strike(tmp_path: Path):
