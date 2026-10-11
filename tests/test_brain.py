@@ -60,7 +60,7 @@ def test_wide_spread_and_misalignment_are_rejected():
 def test_selects_nearest_atm_only_among_eligible_contracts():
     selected, assessments = select_candidate(
         [
-            candidate(symbol="near-but-expensive", strike=100, premium=100),
+            candidate(symbol="near-but-expensive", strike=100, premium=150),
             candidate(symbol="farther-but-affordable", strike=105, premium=20),
             candidate(symbol="nearest-affordable", strike=101, premium=20),
         ],
@@ -73,7 +73,7 @@ def test_selects_nearest_atm_only_among_eligible_contracts():
 
 def test_no_trade_is_valid_result():
     selected, assessments = select_candidate(
-        [candidate(premium=100)], BrainConfig()
+        [candidate(premium=150)], BrainConfig()
     )
     assert selected is None
     assert len(assessments) == 1
