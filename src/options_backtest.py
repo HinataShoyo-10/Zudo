@@ -325,7 +325,7 @@ def run_backtest(
     if lot_size <= 0 or initial_cash <= 0:
         raise ValueError("lot_size and initial_cash must be positive")
     if not (0 < risk_fraction <= hard_risk_fraction <= 0.01):
-        raise ValueError("require 0 < risk_fraction <= hard_risk_fraction <= 1%")
+        raise ValueError("require 0 < risk_fraction <= hard_risk_fraction <= 1 percent")
     if opening_range_minutes <= 0 or opening_range_minutes % 5 != 0:
         raise ValueError("opening_range_minutes must be a positive multiple of 5")
     if not (0 < stop_loss_pct < 1) or target_r <= 0:
@@ -622,8 +622,8 @@ def main() -> None:
     parser.add_argument("--option-symbol", required=True, help="Contract symbol matching the option CSV")
     parser.add_argument("--lot-size", type=int, required=True, help="Exchange lot size for this historical contract")
     parser.add_argument("--initial-cash", type=float, default=100000.0)
-    parser.add_argument("--risk-fraction", type=float, default=0.005, help="Target planned risk, default 0.5%")
-    parser.add_argument("--hard-risk-fraction", type=float, default=0.01, help="Hard planned-risk ceiling, max 1%")
+    parser.add_argument("--risk-fraction", type=float, default=0.005, help="Target planned risk, default 0.5%%")
+    parser.add_argument("--hard-risk-fraction", type=float, default=0.01, help="Hard planned-risk ceiling, max 1%%")
     parser.add_argument("--opening-range-minutes", type=int, default=30)
     parser.add_argument("--stop-loss-pct", type=float, default=0.20, help="Stop distance as a fraction of entry option premium; default 20%%")
     parser.add_argument("--target-r", type=float, default=1.5, help="Target multiple of planned stop distance")
