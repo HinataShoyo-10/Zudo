@@ -73,6 +73,7 @@ The sample feed is synthetic. The live WebSocket adapter still needs validation 
 - `src/fyers_history.py`: standard historical OHLCV downloader
 - `src/fyers_expired_fno.py`: read-only expired F&O research data client
 - `src/validate_market_data.py`: one-command quality gate for the stock CSV and saved options API responses
+- `src/options_backtest.py`: research-only NIFTY opening-range breakout call-options simulator
 - `docs/OPTIONS_DATA.md`: NIFTY expired-options data steps, limits, and safety notes
 - `docs/RESEARCH_ROADMAP.md`: project validation gates
 - `tests/`: unit tests

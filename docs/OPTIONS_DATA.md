@@ -117,3 +117,54 @@ The command prints one JSON summary with overall `PASS`, `WARN`, or `FAIL`, and 
 ```bash
 python -m pytest -q
 ```
+
+
+## First options backtest (research-only)
+
+After saving both `nifty_index_5m_2025-01-02_to_09.csv` and the normalized option CSV, run this one-contract prototype:
+
+```bash
+python -m src.options_backtest \
+  --index-csv data/fyers_expired/nifty_index_5m_2025-01-02_to_09.csv \
+  --option-csv data/fyers_expired/nifty_option_2025-01-02_to_09.csv \
+  --option-symbol NSE:NIFTY2510923600CE \
+  --lot-size 75 \
+  --initial-cash 100000 \
+  --risk-fraction 0.005 \
+  --hard-risk-fraction 0.01 \
+  --opening-range-minutes 30 \
+  --stop-loss-pct 0.20 \
+  --target-r 1.5 \
+  --slippage-bps-per-side 5 \
+  --out backtest_output_nifty_options
+```
+
+For the January 2025 weekly NIFTY contract, 75 is the lot size introduced for new index derivatives in November 2024. Confirm the contract master for the specific symbol/date if using another contract. Official NSE circular: https://nsearchives.nseindia.com/content/circulars/FAOP64990.pdf
+
+### What the prototype does
+
+- Use the first 30 minutes (09:15–09:40 candle-starts) to calculate the NIFTY opening-range high/low.
+- When a later NIFTY candle closes above the opening-range high, consider one long-call entry at the **next** five-minute option candle's open.
+- Permit at most one signal attempt per session; this version only models the selected call contract.
+- Use a 20% option-premium stop and 1.5R take-profit as an initial hypothesis, not recommended or tuned parameters.
+- If a candle touches both stop and target, assume the stop was hit first.
+- Skip any signal if one lot breaches the 0.5% planned-risk target, 1% hard planned-risk ceiling, or available cash. Do not increase risk just to force trades.
+- Exit at the last available option candle in the same session.
+- Report gross P&L separately from slippage, brokerage, and modeled transaction taxes; include skipped signals and their reasons.
+
+The index history can show volume as zero. This prototype never uses index volume for its signals. It requires exact index/option timestamp alignment on shared dates and stops if timestamps do not match.
+
+Outputs in `backtest_output_nifty_options/`:
+- `summary.json`: metrics, assumptions, skipped-signal reasons, cost breakdown, and limitations
+- `trades.csv`: executed trades (may contain headers and no rows if the risk gate skips every signal)
+- `signals.csv`: traded, skipped, and no-signal outcomes by session
+- `equity_curve.csv`: intraday marked-to-market equity estimate
+
+### Historical cost assumptions for January 2025
+
+Defaults are an estimate: FYERS options brokerage ₹20 per executed order; NSE options transaction charge 0.03503% of premium turnover; SEBI turnover fee ₹10/crore; STT 0.10% of option premium on the sell side (increased to 0.15% from 1 April 2026); buyer stamp duty 0.003%; and 18% GST on modeled brokerage/exchange/SEBI costs. These defaults are configurable. Verify their applicability using the historical rates, account plan, and contract notes. Official references:
+- FYERS equity F&O brokerage: https://support.fyers.in/portal/en/kb/articles/what-are-the-brokerage-charges-for-equity-f-o
+- NSE STT rate schedule: https://www.nseindia.com/static/products-services/equity-derivatives-securities-transaction-tax
+- NSE transaction-charge revision effective 1 October 2024: https://zerodha.com/marketintel/bulletin/391488/revision-in-transactions-charges-from-1st-october-2024
+
+One contract over six trading sessions is far too small to accept a strategy. OHLC candles do not establish executable bid/ask fills, and a planned stop is not a guaranteed maximum loss. This is a software/hypothesis-testing milestone, not evidence of an edge; no live orders are included.
