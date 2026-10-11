@@ -131,23 +131,23 @@ def run_backtest(
         elif pending == "SELL":
             if position is not None:
                 exit_price = bar.open * (1.0 - slip)
-            entry_price = float(position["entry_price"])
-            qty = int(position["quantity"])
-            gross = (exit_price - entry_price) * qty
-            fees = 2.0 * fee_per_side
-            net = gross - fees
-            trades.append(Trade(
-                entry_time=str(position["entry_time"]),
-                exit_time=bar.timestamp.isoformat(),
-                entry_price=entry_price,
-                exit_price=exit_price,
-                quantity=qty,
-                gross_pnl=gross,
-                fees=fees,
-                net_pnl=net,
-            ))
-            realized_pnl += net
-            position = None
+                entry_price = float(position["entry_price"])
+                qty = int(position["quantity"])
+                gross = (exit_price - entry_price) * qty
+                fees = 2.0 * fee_per_side
+                net = gross - fees
+                trades.append(Trade(
+                    entry_time=str(position["entry_time"]),
+                    exit_time=bar.timestamp.isoformat(),
+                    entry_price=entry_price,
+                    exit_price=exit_price,
+                    quantity=qty,
+                    gross_pnl=gross,
+                    fees=fees,
+                    net_pnl=net,
+                ))
+                realized_pnl += net
+                position = None
             pending = None
 
         # Mark equity at the current candle close, including estimated costs.
