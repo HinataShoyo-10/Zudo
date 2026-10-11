@@ -40,7 +40,7 @@ def validate_dataset(index_rows: list[dict[str, Any]], specs: list[dict[str, Any
 
 def run_validation(index_csv: Path, manifest_path: Path, out_dir: Path,
                    *, initial_cash: float = 100_000.0,
-                   risk_fraction: float = 0.005, hard_risk_fraction: float = 0.01,
+                   risk_fraction: float = 0.02, hard_risk_fraction: float = 0.02,
                    max_exposure_fraction: float = 0.20,
                    opening_range_minutes: int = 30, stop_loss_pct: float = 0.20,
                    target_r: float = 1.5) -> dict[str, Any]:
@@ -125,8 +125,8 @@ def main() -> None:
     parser.add_argument("--contracts-manifest", required=True, type=Path)
     parser.add_argument("--out", default=Path("backtest_output_nifty_validation"), type=Path)
     parser.add_argument("--initial-cash", default=100_000.0, type=float)
-    parser.add_argument("--risk-fraction", default=0.005, type=float)
-    parser.add_argument("--hard-risk-fraction", default=0.01, type=float)
+    parser.add_argument("--risk-fraction", default=0.02, type=float)
+    parser.add_argument("--hard-risk-fraction", default=0.02, type=float)
     parser.add_argument("--max-exposure-fraction", default=0.20, type=float)
     parser.add_argument("--opening-range-minutes", default=30, type=int)
     parser.add_argument("--stop-loss-pct", default=0.20, type=float)
