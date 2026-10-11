@@ -9,7 +9,7 @@ The "brain" is a decision pipeline, not a single predictive model. It must be ab
 - `src/brain.py` implements deterministic pre-trade gates for a candidate option: input validity, timestamp alignment, bid/ask spread, volume presence, single-lot exposure, target risk, and hard risk ceiling.
 - Candidate selection is based on strike proximity among candidates that pass gates. It does not rank contracts by future P&L.
 - `tests/test_brain.py` covers hard risk caps, high-premium rejection, missing liquidity, timestamp misalignment, selection, and valid no-trade outcomes.
-- This module is **not yet wired into** `src/options_dynamic_backtest.py`. Do not interpret it as a validated trading strategy. Its risk estimate is a transparent price-loss/slippage approximation and does not replace the detailed charge model in the backtester.
+- `src/options_dynamic_backtest.py` now calls the deterministic brain gates before accepting a candidate. OHLCV-only research mode explicitly marks missing bid/ask as `liquidity_unverified_missing_bid_ask`; `--require-liquidity-data` switches to strict rejection. The brain risk estimate remains an additional approximation and does not replace the detailed charge model in the backtester.
 
 ## Architecture
 
@@ -21,6 +21,12 @@ The "brain" is a decision pipeline, not a single predictive model. It must be ab
 6. **Evaluation** — compare with no-trade and simple baselines; report net returns, drawdown, expectancy, profit factor, turnover, costs, skipped trades, and sample size. Split by chronological train/validation/test periods; freeze rules before the final holdout.
 7. **Paper trader** — same signal/risk code as backtest, but simulated execution only. Log every intended order, fill assumption, rejection, and market snapshot.
 8. **Live readiness gate** — separate project phase requiring extended paper results, failure recovery, broker constraints, operational monitoring, and user approval. No live order placement is included now.
+
+## AI model integration (future, not yet enabled)
+
+Use an AI model as an optional research analyst, not as the authority that can authorize trades. A future adapter may return a strict, versioned JSON assessment of a completed-candle market snapshot (for example: regime label, setup-quality score, concise rationale, and abstain flag). The deterministic engine must validate schema, timestamp, model version, and latency; malformed, late, or unavailable output means **NO TRADE** or the explicitly defined deterministic fallback. The model cannot set quantity, change risk caps, invent quotes, bypass data checks, or call broker order endpoints.
+
+Evaluate a model against the same chronological holdout as the deterministic baseline, using identical fills, fees, and slippage. Compare net expectancy, drawdown, calibration, coverage/abstention, and stability across regimes. Require repeatable out-of-sample improvement after costs before retaining it. Start with a replaceable provider interface rather than coupling the project to one vendor. Gemini and Llama are plausible candidates to benchmark; neither should be assumed to predict short-horizon option prices profitably without evidence.
 
 ## Non-negotiable controls
 
@@ -35,7 +41,7 @@ The "brain" is a decision pipeline, not a single predictive model. It must be ab
 ## Next implementation sequence
 
 1. Integrate the brain gates into the dynamic options backtester and preserve a per-candidate diagnostics table.
-2. Extend the data schema to optionally ingest point-in-time bid/ask and liquidity data; reject missing values whenever the selected strategy requires them.
+2. Extend the data schema to ingest point-in-time bid/ask and liquidity data; run strict mode whenever those quotes are available and required.
 3. Add walk-forward evaluation and a baseline comparison report.
 4. Add a deterministic paper-trading simulator with persistent event logs and a daily risk kill switch.
 5. Add monitoring and operational failure tests before considering any broker execution layer.
