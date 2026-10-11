@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Iterable
 
+from src.options_backtest import CostRates, order_charges
+
 
 @dataclass(frozen=True)
 class BrainConfig:
@@ -22,6 +24,7 @@ class BrainConfig:
     max_spread_fraction: float = 0.03
     min_volume: float = 1.0
     require_liquidity_data: bool = True
+    cost_rates: CostRates = CostRates()
 
     def validate(self) -> None:
         if not isfinite(self.capital) or self.capital <= 0:
@@ -109,8 +112,11 @@ def assess_candidate(candidate: OptionCandidate, config: BrainConfig) -> Candida
     entry = candidate.entry_premium * (1 + config.slippage_bps_per_side / 10_000)
     exit_fill = entry * (1 - config.stop_loss_fraction) * (1 - config.slippage_bps_per_side / 10_000)
     exposure = entry * candidate.lot_size
-    # Conservative transparent estimate: price loss plus entry/stop slippage.
-    risk = max(0.0, (entry - exit_fill) * candidate.lot_size)
+    # Match options_backtest._planned_risk: price loss plus estimated charges
+    # on both the entry and stop exit. Prices use the same adverse slippage model.
+    entry_charges = order_charges(entry, candidate.lot_size, "BUY", config.cost_rates)["total"]
+    exit_charges = order_charges(exit_fill, candidate.lot_size, "SELL", config.cost_rates)["total"]
+    risk = max(0.0, (entry - exit_fill) * candidate.lot_size) + entry_charges + exit_charges
     risk_budget = config.capital * config.risk_fraction
     hard_budget = config.capital * config.hard_risk_fraction
     exposure_budget = config.capital * config.max_exposure_fraction
