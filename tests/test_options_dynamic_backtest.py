@@ -86,3 +86,26 @@ def test_skipped_signal_count_is_per_session_not_per_rejected_contract():
     assert result["summary"]["candidate_rejections"] == 2
     assert sum(result["summary"]["skipped_reasons"].values()) == 1
     assert sum(result["summary"]["candidate_rejection_reasons"].values()) == 2
+
+
+
+def test_dynamic_backtest_surfaces_missing_bid_ask_as_unverified():
+    index_rows, option_rows = make_day()
+    spec = {"symbol": "NSE:NIFTY2510923600CE", "csv": Path("a.csv"), "lot_size": 1,
+            "strike": 103, "expiry": "2025-01-09", "option_type": "CE"}
+    result = run_dynamic_backtest(index_rows, [spec], {spec["symbol"]: option_rows})
+    assert result["summary"]["trades"] == 1
+    assert result["summary"]["liquidity_unverified_candidates"] == 1
+    assert "liquidity_unverified_missing_bid_ask" in result["candidate_diagnostics"][0]["brain_warnings"]
+
+
+def test_dynamic_backtest_strict_liquidity_mode_rejects_ohlcv_only_data():
+    index_rows, option_rows = make_day()
+    spec = {"symbol": "NSE:NIFTY2510923600CE", "csv": Path("a.csv"), "lot_size": 1,
+            "strike": 103, "expiry": "2025-01-09", "option_type": "CE"}
+    result = run_dynamic_backtest(
+        index_rows, [spec], {spec["symbol"]: option_rows}, require_liquidity_data=True
+    )
+    assert result["summary"]["trades"] == 0
+    assert result["summary"]["skipped_signals"] == 1
+    assert "missing_bid_ask" in result["candidate_diagnostics"][0]["reason"]
