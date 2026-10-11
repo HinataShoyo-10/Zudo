@@ -20,10 +20,10 @@ def candidate(symbol="NIFTY-ATM", strike=100, premium=20, **kwargs):
     return OptionCandidate(**defaults)
 
 
-def test_config_keeps_risk_ceiling_at_one_percent():
+def test_config_keeps_risk_ceiling_at_two_percent():
     BrainConfig().validate()
     with pytest.raises(ValueError):
-        BrainConfig(hard_risk_fraction=0.02).validate()
+        BrainConfig(hard_risk_fraction=0.03).validate()
 
 
 def test_affordable_candidate_passes_gates():
@@ -35,7 +35,7 @@ def test_affordable_candidate_passes_gates():
 
 
 def test_high_premium_candidate_is_rejected_for_risk():
-    result = assess_candidate(candidate(premium=100), BrainConfig())
+    result = assess_candidate(candidate(premium=200), BrainConfig())
     assert not result.eligible
     assert "one_lot_exceeds_target_risk" in result.reasons
     assert "one_lot_exceeds_hard_risk_limit" in result.reasons
