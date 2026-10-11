@@ -72,7 +72,7 @@ The `data/fyers_expired/` directory is ignored by Git so account-acquired data i
 
 ## Risk model direction
 
-- Use 0.5% of configured capital as the target planned risk and 1% as a hard planned-risk cap.
+- Use 2% of configured capital as both the target planned risk and hard planned-risk cap for this research run (₹2,000 at ₹100,000 capital). This is a research assumption to validate, not a guarantee of maximum realized loss.
 - Position size must be based on option entry-to-stop loss plus a cost/slippage allowance and the contract lot size.
 - If one lot exceeds the risk cap, skip the trade.
 - Avoid undefined-risk option selling in the initial version.
@@ -148,7 +148,7 @@ For the January 2025 weekly NIFTY contract, 75 is the lot size introduced for ne
 - Permit at most one signal attempt per session; this version only models the selected call contract.
 - Use a 20% option-premium stop and 1.5R take-profit as an initial hypothesis, not recommended or tuned parameters.
 - If a candle touches both stop and target, assume the stop was hit first.
-- Skip any signal if one lot breaches the 0.5% planned-risk target, 1% hard planned-risk ceiling, or available cash. Do not increase risk just to force trades.
+- Skip any signal if one lot breaches the 2% planned-risk target and 2% hard planned-risk ceiling, or available cash. Do not increase risk just to force trades.
 - Exit at the last available option candle in the same session.
 - Report gross P&L separately from slippage, brokerage, and modeled transaction taxes; include skipped signals and their reasons.
 
@@ -208,8 +208,8 @@ python -m src.options_dynamic_backtest \\
   --index-csv data/fyers_expired/nifty_index_5m_2025-01-02_to_09.csv \\
   --contracts-manifest data/fyers_expired/nifty_calls_manifest.json \\
   --initial-cash 100000 \\
-  --risk-fraction 0.005 \\
-  --hard-risk-fraction 0.01 \\
+  --risk-fraction 0.02 \\
+  --hard-risk-fraction 0.02 \\
   --max-exposure-fraction 0.20 \\
   --opening-range-minutes 30 \\
   --stop-loss-pct 0.20 \\
@@ -218,4 +218,4 @@ python -m src.options_dynamic_backtest \\
   --out backtest_output_dynamic
 ```
 
-The dynamic output writes `summary.json`, `trades.csv`, `signals.csv`, and `candidate_diagnostics.csv`. The diagnostics file records each contract/session candidate, its eligibility status and rejection reason, entry premium, one-lot premium cost, planned risk, strike distance, and expiry. It helps explain why a signal was skipped instead of showing only an aggregate reason. In `summary.json`, `skipped_signals` and `skipped_reasons` count signal sessions (at most once per session), while `candidate_rejections` and `candidate_rejection_reasons` count individual contracts rejected by risk/cash/exposure gates. These are different units and should not be added together. It still has important limits: the candidate universe is only as complete as your downloaded manifest; selection uses strike proximity and affordability, not bid/ask spread, open interest, or liquidity; and historical OHLC does not establish executable fills. Collect several strikes per expiry and multiple expiries if your data plan permits, but respect the FYERS expired-data request allowance. Never loosen the 0.5% target-risk / 1% hard-risk rules just to create trades. Research and paper testing only; no order endpoints are called.
+The dynamic output writes `summary.json`, `trades.csv`, `signals.csv`, and `candidate_diagnostics.csv`. The diagnostics file records each contract/session candidate, its eligibility status and rejection reason, entry premium, one-lot premium cost, planned risk, strike distance, and expiry. It helps explain why a signal was skipped instead of showing only an aggregate reason. In `summary.json`, `skipped_signals` and `skipped_reasons` count signal sessions (at most once per session), while `candidate_rejections` and `candidate_rejection_reasons` count individual contracts rejected by risk/cash/exposure gates. These are different units and should not be added together. It still has important limits: the candidate universe is only as complete as your downloaded manifest; selection uses strike proximity and affordability, not bid/ask spread, open interest, or liquidity; and historical OHLC does not establish executable fills. Collect several strikes per expiry and multiple expiries if your data plan permits, but respect the FYERS expired-data request allowance. Do not loosen the 2% target-risk / 2% hard-risk rules just to create trades. Research and paper testing only; no order endpoints are called.
