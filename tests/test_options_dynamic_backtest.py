@@ -109,3 +109,20 @@ def test_dynamic_backtest_strict_liquidity_mode_rejects_ohlcv_only_data():
     assert result["summary"]["trades"] == 0
     assert result["summary"]["skipped_signals"] == 1
     assert "missing_bid_ask" in result["candidate_diagnostics"][0]["reason"]
+
+
+def test_risk_rejection_contains_brain_diagnostics():
+    index_rows, option_rows = make_day()
+    spec = {"symbol": "NSE:NIFTY2510923600CE", "csv": Path("a.csv"), "lot_size": 75,
+            "strike": 103, "expiry": "2025-01-09", "option_type": "CE"}
+    expensive_rows = [dict(row, open=400.0, high=410.0, low=390.0, close=400.0) for row in option_rows]
+    result = run_dynamic_backtest(
+        index_rows, [spec], {spec["symbol"]: expensive_rows},
+        initial_cash=100_000, risk_fraction=0.005, hard_risk_fraction=0.01,
+        max_exposure_fraction=0.20,
+    )
+    diagnostic = next(row for row in result["candidate_diagnostics"] if row["status"] == "REJECTED")
+    assert diagnostic["backtest_reason"] == "one_lot_exceeds_planned_risk"
+    assert diagnostic["brain_eligible"] is False
+    assert diagnostic["brain_estimated_stop_risk"] > 500
+    assert "one_lot_exceeds_target_risk" in diagnostic["brain_reasons"]
