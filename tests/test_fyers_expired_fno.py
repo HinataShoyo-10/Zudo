@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from src.fyers_expired_fno import BASE_URL, FyersExpiredFnoClient, _validate_date_range
+from src.fyers_expired_fno import (
+    BASE_URL, FyersExpiredFnoClient, _validate_date_range,
+    normalize_historical_payload,
+)
 
 
 class FakeResponse:
@@ -94,3 +97,46 @@ def test_api_error_is_reported_without_changing_endpoint_scope():
 def test_empty_credentials_are_rejected():
     with pytest.raises(ValueError, match="FYERS_APP_ID"):
         FyersExpiredFnoClient("", "token", http=FakeHttp({"s": "ok"}))
+
+
+
+def test_normalize_historical_payload_converts_unix_to_ist_and_preserves_greeks():
+    payload = {
+        "s": "ok",
+        "symbol": "NSE:NIFTY2510923600CE",
+        "resolution": "5",
+        "columns": [
+            "timestamp", "open", "high", "low", "close", "volume", "open_interest",
+            "implied_volatility", "delta", "gamma", "theta", "vega",
+        ],
+        "candles": [
+            [1736135400, 450, 460, 440, 455, 12000, 350000, 17.2, 0.87, 0.0006, -13.0, 5.0],
+            [1736135100, 436.5, 458.75, 435.1, 450, 10952, 349800, 17.18, 0.86, 0.0006, -13.14, 4.99],
+        ],
+    }
+    rows = normalize_historical_payload(payload)
+    assert len(rows) == 2
+    assert rows[0]["timestamp"] == "2025-01-06T09:15:00+05:30"
+    assert rows[1]["timestamp"] == "2025-01-06T09:20:00+05:30"
+    assert rows[0]["open_interest"] == 349800
+    assert rows[0]["delta"] == 0.86
+
+
+def test_normalize_historical_payload_rejects_unknown_schema_columns():
+    payload = {
+        "s": "ok",
+        "columns": ["timestamp", "open", "high", "low", "close", "volume", "mystery"],
+        "candles": [[1736135100, 100, 101, 99, 100, 1, 7]],
+    }
+    with pytest.raises(ValueError, match="Unsupported candle columns"):
+        normalize_historical_payload(payload)
+
+
+def test_normalize_historical_payload_rejects_invalid_ohlc():
+    payload = {
+        "s": "ok",
+        "columns": ["timestamp", "open", "high", "low", "close", "volume"],
+        "candles": [[1736135100, 100, 99, 98, 101, 1]],
+    }
+    with pytest.raises(ValueError, match="high invariant"):
+        normalize_historical_payload(payload)
