@@ -98,9 +98,12 @@ def _check_ohlc(item: dict[str, float], row_number: int) -> str | None:
 def _session_issue(ts: datetime, resolution: int) -> str | None:
     if ts.weekday() >= 5:
         return f"{ts.isoformat()} falls on a weekend"
-    if ts.time() < MARKET_OPEN or ts.time() > LAST_BAR_START:
+    # datetime.time() retains tzinfo for aware timestamps; compare local wall
+    # clock values without tzinfo because the input has already been converted to IST.
+    wall_time = ts.timetz().replace(tzinfo=None)
+    if wall_time < MARKET_OPEN or wall_time > LAST_BAR_START:
         return f"{ts.isoformat()} is outside the regular 09:15–15:25 IST candle-start window"
-    elapsed = int((datetime.combine(ts.date(), ts.time()) -
+    elapsed = int((datetime.combine(ts.date(), wall_time) -
                    datetime.combine(ts.date(), MARKET_OPEN)).total_seconds() // 60)
     if elapsed % resolution != 0:
         return f"{ts.isoformat()} is not aligned to a {resolution}-minute session grid"
