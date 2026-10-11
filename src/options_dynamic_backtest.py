@@ -123,8 +123,15 @@ def run_dynamic_backtest(
                     max_entry_time=max_entry_time, slippage_bps=slippage_bps,
                     rates=rates, max_exposure_fraction=max_exposure_fraction,
                 )
-            except ValueError:
-                # Missing/misaligned history makes this contract ineligible for this day.
+            except ValueError as exc:
+                # Keep data-quality rejections visible instead of silently dropping candidates.
+                candidate_diagnostics.append({
+                    "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                    "expiry": spec["expiry"], "status": "INELIGIBLE",
+                    "reason": f"data_or_alignment_error: {exc}", "index_close_at_signal": "",
+                    "entry_timestamp": "", "entry_premium": "", "one_lot_premium": "",
+                    "planned_risk": "", "strike_distance": "",
+                })
                 continue
             signal = next((s for s in result["signals"] if s["status"] != "NO_SIGNAL"), None)
             if signal is None:
