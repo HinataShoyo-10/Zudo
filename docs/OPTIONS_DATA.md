@@ -81,3 +81,39 @@ The `data/fyers_expired/` directory is ignored by Git so account-acquired data i
 - Historical OHLC alone cannot reconstruct executable bid/ask or true intrabar stop fills. Prefer actual bid/ask when a reliable source exists; otherwise use conservative spread/slippage stress assumptions and label the limitation.
 
 No live orders are included or enabled.
+
+
+## One-command validation gate
+
+After you have saved the expiry, contracts, and option-history API responses, run this **single command** to validate the whole downloaded-data set. It makes no network requests. The optional stock CSV validates your existing SBIN data in the same run.
+
+```bash
+python -m src.validate_market_data \
+  --expiry-json data/fyers_expired/nifty_expiries_jan2025.json \
+  --contracts-json data/fyers_expired/nifty_contracts_2025-01-09.json \
+  --options-json data/fyers_expired/nifty_option_2025-01-06.json \
+  --expected-expiry 2025-01-09 \
+  --expected-trading-date 2025-01-06 \
+  --expected-symbol NSE:NIFTY2510923600CE \
+  --resolution 5 \
+  --stock-csv data/sbin_5m.csv \
+  --report-out data/fyers_expired/validation_report.json
+```
+
+Adjust the input paths and expected symbol to match the files/contracts you actually downloaded. Do not paste invented filenames into the command; use your actual saved filenames.
+
+The single report checks:
+- JSON files load and API responses report success;
+- requested expiry appears in the returned option-expiry list;
+- contracts JSON is for that expiry and the historical symbol appears in its contract list;
+- history symbol, timeframe, columns, row lengths, numeric values, timestamps, OHLC invariants, option delta range, market-session hours, and date selection;
+- duplicate/out-of-order timestamps and missing five-minute slots;
+- the optional stock CSV's schema, numeric values, timestamps, OHLC, session, and gaps.
+
+Warnings for missing candle slots are not automatically treated as failures because illiquid option contracts can legitimately have no candle in some intervals. Review gap warnings against the instrument and provider behavior. This validator checks consistency and basic data quality; it does not prove that the vendor data is economically correct or guarantee fill realism.
+
+The command prints one JSON summary with overall `PASS`, `WARN`, or `FAIL`, and exits with code 1 when errors are found. It can also save that same summary to `--report-out`. Run the unit tests separately when source code changes:
+
+```bash
+python -m pytest -q
+```
