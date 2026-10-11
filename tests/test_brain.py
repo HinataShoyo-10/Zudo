@@ -98,4 +98,8 @@ def test_strict_mode_rejects_missing_quotes_even_if_volume_exists():
     assert not result.eligible
     assert "missing_bid_ask" in result.reasons
 
-# Risk parity regression test added alongside the brain/backtest integration.
+
+def test_estimated_risk_includes_transaction_costs():
+    result = assess_candidate(candidate(premium=20, lot_size=75), BrainConfig())
+    price_only_risk = result.entry_estimate * (1 - (1 - BrainConfig().stop_loss_fraction) * (1 - BrainConfig().slippage_bps_per_side / 10_000)) * 75
+    assert result.estimated_stop_risk > price_only_risk
