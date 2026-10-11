@@ -94,6 +94,7 @@ def run_dynamic_backtest(
 
     all_trades: list[dict[str, Any]] = []
     all_signals: list[dict[str, Any]] = []
+    candidate_diagnostics: list[dict[str, Any]] = []
     skipped = Counter()
     days_processed = 0
     cash = initial_cash
@@ -104,6 +105,13 @@ def run_dynamic_backtest(
         for spec in contract_specs:
             rows = [r for r in contract_rows[spec["symbol"]] if r["timestamp"].date().isoformat() == day]
             if not rows:
+                candidate_diagnostics.append({
+                    "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                    "expiry": spec["expiry"], "status": "INELIGIBLE",
+                    "reason": "no_option_candles_for_session", "index_close_at_signal": "",
+                    "entry_timestamp": "", "entry_premium": "", "one_lot_premium": "",
+                    "planned_risk": "", "strike_distance": "",
+                })
                 continue
             try:
                 result = run_backtest(
@@ -120,17 +128,49 @@ def run_dynamic_backtest(
                 continue
             signal = next((s for s in result["signals"] if s["status"] != "NO_SIGNAL"), None)
             if signal is None:
+                candidate_diagnostics.append({
+                    "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                    "expiry": spec["expiry"], "status": "NO_SIGNAL", "reason": "",
+                    "index_close_at_signal": "", "entry_timestamp": "",
+                    "entry_premium": "", "one_lot_premium": "", "planned_risk": "",
+                    "strike_distance": "",
+                })
                 continue
             daily_signal = signal
+            entry_ts_text = signal.get("entry_timestamp", "")
+            entry_row = next((r for r in rows if r["timestamp"].isoformat() == entry_ts_text), None)
+            entry_premium = float(entry_row["open"]) if entry_row else None
+            index_close = float(signal["index_close_at_signal"])
+            strike_distance = abs(float(spec["strike"]) - index_close)
+            one_lot_premium = entry_premium * int(spec["lot_size"]) if entry_premium is not None else None
             if result["trades"]:
                 trade = result["trades"][0]
-                candidates.append((abs(spec["strike"] - float(signal["index_close_at_signal"])), spec, trade, signal))
-            elif signal.get("skip_reason"):
-                skipped[signal["skip_reason"]] += 1
+                candidates.append((strike_distance, spec, trade, signal))
+                candidate_diagnostics.append({
+                    "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                    "expiry": spec["expiry"], "status": "ELIGIBLE", "reason": "",
+                    "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
+                    "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
+                    "planned_risk": trade["planned_risk"], "strike_distance": strike_distance,
+                })
+            else:
+                reason = signal.get("skip_reason") or "not_eligible"
+                skipped[reason] += 1
+                candidate_diagnostics.append({
+                    "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                    "expiry": spec["expiry"], "status": "REJECTED", "reason": reason,
+                    "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
+                    "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
+                    "planned_risk": signal.get("planned_risk", ""), "strike_distance": strike_distance,
+                })
 
         if candidates:
             # Choose by strike proximity only, never by future P&L.
-            _, chosen_spec, trade, signal = min(candidates, key=lambda x: (x[0], x[1]["strike"], x[1]["symbol"]))
+            # Tie-break by nearer valid expiry, then strike and symbol. Never use future P&L.
+            _, chosen_spec, trade, signal = min(
+                candidates,
+                key=lambda x: (x[0], x[1]["expiry"], x[1]["strike"], x[1]["symbol"]),
+            )
             trade["trade_id"] = len(all_trades) + 1
             trade["cash_before_trade"] = cash
             cash += float(trade["net_pnl"])
@@ -187,7 +227,12 @@ def run_dynamic_backtest(
             "Opening-range breakout is an unvalidated hypothesis; no live orders are placed.",
         ],
     }
-    return {"summary": summary, "trades": all_trades, "signals": all_signals}
+    return {
+        "summary": summary,
+        "trades": all_trades,
+        "signals": all_signals,
+        "candidate_diagnostics": candidate_diagnostics,
+    }
 
 
 def main() -> None:
@@ -224,6 +269,7 @@ def main() -> None:
     (out / "summary.json").write_text(json.dumps(result["summary"], indent=2, allow_nan=False) + "\n", encoding="utf-8")
     _write_csv(out / "trades.csv", result["trades"])
     _write_csv(out / "signals.csv", result["signals"])
+    _write_csv(out / "candidate_diagnostics.csv", result["candidate_diagnostics"])
     print(json.dumps(result["summary"], indent=2))
     print(f"Saved dynamic backtest outputs to {out}")
 
