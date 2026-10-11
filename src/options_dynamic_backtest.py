@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from src.options_backtest import CostRates, load_candles, run_backtest, parse_time
+from src.brain import BrainConfig, OptionCandidate, assess_candidate
 
 
 def _strike_from_symbol(symbol: str) -> float:
@@ -84,8 +85,13 @@ def run_dynamic_backtest(
     max_entry_time: time = time(14, 30),
     slippage_bps: float = 5.0,
     rates: CostRates = CostRates(),
+    require_liquidity_data: bool = False,
 ) -> dict[str, Any]:
-    """Select nearest-ATM call among contracts passing entry-time risk gates."""
+    """Select nearest-ATM call through deterministic brain gates and cost backtester.
+
+    OHLCV-only research mode marks absent bid/ask quotes as unverified. Set
+    require_liquidity_data=True to reject candidates without point-in-time quotes.
+    """
     by_day: dict[str, list[dict[str, Any]]] = {}
     for row in index_rows:
         by_day.setdefault(row["timestamp"].date().isoformat(), []).append(row)
@@ -152,8 +158,39 @@ def run_dynamic_backtest(
             index_close = float(signal["index_close_at_signal"])
             strike_distance = abs(float(spec["strike"]) - index_close)
             one_lot_premium = entry_premium * int(spec["lot_size"]) if entry_premium is not None else None
-            if result["trades"]:
+            if result["trades"] and entry_row is not None:
                 trade = result["trades"][0]
+                brain_config = BrainConfig(
+                    capital=cash, risk_fraction=risk_fraction,
+                    hard_risk_fraction=hard_risk_fraction,
+                    max_exposure_fraction=max_exposure_fraction,
+                    stop_loss_fraction=stop_loss_pct,
+                    slippage_bps_per_side=slippage_bps,
+                    require_liquidity_data=require_liquidity_data,
+                )
+                assessment = assess_candidate(OptionCandidate(
+                    symbol=spec["symbol"], strike=float(spec["strike"]),
+                    entry_premium=entry_premium, lot_size=int(spec["lot_size"]),
+                    index_price=index_close,
+                    bid=float(entry_row["bid"]) if entry_row.get("bid") not in (None, "") else None,
+                    ask=float(entry_row["ask"]) if entry_row.get("ask") not in (None, "") else None,
+                    volume=float(entry_row["volume"]) if entry_row.get("volume") not in (None, "") else None,
+                    timestamp_aligned=True, data_valid=True,
+                ), brain_config)
+                if not assessment.eligible:
+                    reason = ";".join(assessment.reasons)
+                    candidate_rejections[reason] += 1
+                    day_rejection_reasons.append(reason)
+                    candidate_diagnostics.append({
+                        "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
+                        "expiry": spec["expiry"], "status": "REJECTED", "reason": reason,
+                        "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
+                        "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
+                        "planned_risk": trade["planned_risk"], "strike_distance": strike_distance,
+                        "brain_estimated_stop_risk": assessment.estimated_stop_risk,
+                        "brain_warnings": ";".join(assessment.warnings),
+                    })
+                    continue
                 candidates.append((strike_distance, spec, trade, signal))
                 candidate_diagnostics.append({
                     "date": day, "symbol": spec["symbol"], "strike": spec["strike"],
@@ -161,6 +198,8 @@ def run_dynamic_backtest(
                     "index_close_at_signal": index_close, "entry_timestamp": entry_ts_text,
                     "entry_premium": entry_premium, "one_lot_premium": one_lot_premium,
                     "planned_risk": trade["planned_risk"], "strike_distance": strike_distance,
+                    "brain_estimated_stop_risk": assessment.estimated_stop_risk,
+                    "brain_warnings": ";".join(assessment.warnings),
                 })
             else:
                 reason = signal.get("skip_reason") or "not_eligible"
@@ -237,9 +276,15 @@ def run_dynamic_backtest(
         "max_exposure_fraction": max_exposure_fraction, "opening_range_minutes": opening_range_minutes,
         "stop_loss_pct_of_option_premium": stop_loss_pct * 100.0, "take_profit_r": target_r,
         "index_volume_used_for_signals": False, "intraday_only": True, "research_only": True,
+        "liquidity_data_required": require_liquidity_data,
+        "liquidity_unverified_candidates": sum(
+            1 for row in candidate_diagnostics
+            if "liquidity_unverified_missing_bid_ask" in str(row.get("brain_warnings", ""))
+        ),
         "limitations": [
             "Calls only; contract universe is limited to symbols and history supplied in the manifest.",
-            "Contract is selected from entry-time strike proximity and affordability, not liquidity/spread or future outcomes.",
+            "Contract is selected from entry-time strike proximity after deterministic brain gates; never by future outcomes.",
+            "In OHLCV research mode, missing bid/ask is marked liquidity_unverified; this is not suitable for paper/live execution.",
             "Candidate backtests require exact same-day index/option timestamp alignment.",
             "OHLC fills, slippage, and transaction charges are estimates; stops are not guaranteed loss bounds.",
             "Opening-range breakout is an unvalidated hypothesis; no live orders are placed.",
@@ -266,6 +311,8 @@ def main() -> None:
     parser.add_argument("--target-r", type=float, default=1.5)
     parser.add_argument("--max-entry-time", type=parse_time, default=time(14, 30))
     parser.add_argument("--slippage-bps-per-side", type=float, default=5.0)
+    parser.add_argument("--require-liquidity-data", action="store_true",
+                        help="Reject candidates without point-in-time bid/ask quotes")
     parser.add_argument("--out", required=True, help="Output directory")
     args = parser.parse_args()
     try:
@@ -279,6 +326,7 @@ def main() -> None:
             opening_range_minutes=args.opening_range_minutes, stop_loss_pct=args.stop_loss_pct,
             target_r=args.target_r, max_entry_time=args.max_entry_time,
             slippage_bps=args.slippage_bps_per_side,
+            require_liquidity_data=args.require_liquidity_data,
         )
     except (OSError, ValueError, csv.Error, KeyError, TypeError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
