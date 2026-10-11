@@ -28,6 +28,10 @@ cp .env.example .env
 The CSV must contain these columns: `timestamp,open,high,low,close,volume`. Timestamps should be ISO-8601; timestamps without a timezone are treated as India Standard Time (IST). Rows must be in strictly increasing timestamp order. Use real historical candles from a source you are authorized to use; the backtester does not download data.
 
 ```bash
+# Smoke-test with included synthetic data (not real market data)
+python -m src.backtest --csv data/example_ohlcv.csv
+
+# Run against your own historical candles
 python -m src.backtest --csv data/your_candles.csv
 ```
 
@@ -44,7 +48,7 @@ Output directory contains:
 - `equity_curve.csv`: per-candle marked-to-market equity and drawdown
 - `summary.json`: net P&L, return, trade count, win rate, profit factor and maximum drawdown
 
-A tiny synthetic fixture is used in unit tests only. It is not evidence of strategy profitability. Before relying on results, validate data quality, corporate actions, instrument selection, realistic charges, slippage, liquidity, intraday square-off rules, and out-of-sample performance. Results do not guarantee future returns.
+The included `data/example_ohlcv.csv` is synthetic and exists only to smoke-test the command; it is not real market data or evidence of strategy profitability. Before relying on results, validate data quality, corporate actions, instrument selection, realistic charges, slippage, liquidity, intraday square-off rules, and out-of-sample performance. Results do not guarantee future returns.
 
 ## Sample mode (live-data pipeline smoke test)
 
