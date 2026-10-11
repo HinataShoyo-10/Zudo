@@ -1,19 +1,35 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from src.options_dynamic_backtest import load_manifest, run_dynamic_backtest
 from src.options_backtest import CostRates
-from tests.test_options_backtest import make_day
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def make_day():
+    index_rows, option_rows = [], []
+    start = datetime.fromisoformat("2025-01-06T09:15:00+05:30").astimezone(IST)
+    for i in range(75):
+        ts = start + timedelta(minutes=5 * i)
+        idx = {"timestamp": ts, "open": 101.0, "high": 102.0, "low": 99.0, "close": 101.0, "volume": 0.0}
+        if i == 6:
+            idx.update({"open": 102.0, "high": 104.0, "low": 101.0, "close": 103.0})
+        if i >= 7:
+            idx.update({"open": 103.0, "high": 104.0, "low": 102.0, "close": 103.0})
+        index_rows.append(idx)
+        option_rows.append({"timestamp": ts, "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000.0})
+    return index_rows, option_rows
 
 
 def test_dynamic_selector_chooses_nearest_strike_not_best_future_pnl():
     index_rows, option_rows = make_day()
-    # Both contracts have identical bars; the selector must use strike proximity.
     specs = [
         {"symbol": "NSE:NIFTY2510923600CE", "csv": Path("a.csv"), "lot_size": 1,
          "strike": 100, "expiry": "2025-01-09", "option_type": "CE"},
@@ -21,8 +37,7 @@ def test_dynamic_selector_chooses_nearest_strike_not_best_future_pnl():
          "strike": 103, "expiry": "2025-01-09", "option_type": "CE"},
     ]
     result = run_dynamic_backtest(index_rows, specs, {
-        specs[0]["symbol"]: option_rows,
-        specs[1]["symbol"]: option_rows,
+        specs[0]["symbol"]: option_rows, specs[1]["symbol"]: option_rows,
     }, initial_cash=100_000, risk_fraction=0.005, hard_risk_fraction=0.01,
        max_exposure_fraction=0.20, rates=CostRates())
     assert result["summary"]["trades"] == 1
@@ -41,7 +56,7 @@ def test_manifest_resolves_relative_csv_paths_and_strike(tmp_path: Path):
     assert contracts[0]["strike"] == 23600
 
 
-def test_manifest_requires_expiry_and_lot_size(tmp_path: Path):
+def test_manifest_requires_expiry(tmp_path: Path):
     path = tmp_path / "contracts.json"
     path.write_text(json.dumps({"contracts": [{
         "symbol": "NSE:NIFTY2510923600CE", "csv": "bars.csv", "lot_size": 75
