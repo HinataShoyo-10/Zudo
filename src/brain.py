@@ -16,8 +16,8 @@ from src.options_backtest import CostRates, order_charges
 @dataclass(frozen=True)
 class BrainConfig:
     capital: float = 100_000.0
-    risk_fraction: float = 0.005
-    hard_risk_fraction: float = 0.01
+    risk_fraction: float = 0.02
+    hard_risk_fraction: float = 0.02
     max_exposure_fraction: float = 0.20
     stop_loss_fraction: float = 0.20
     slippage_bps_per_side: float = 5.0
@@ -29,8 +29,8 @@ class BrainConfig:
     def validate(self) -> None:
         if not isfinite(self.capital) or self.capital <= 0:
             raise ValueError("capital must be finite and positive")
-        if not (0 < self.risk_fraction <= self.hard_risk_fraction <= 0.01):
-            raise ValueError("require 0 < risk_fraction <= hard_risk_fraction <= 1%")
+        if not (0 < self.risk_fraction <= self.hard_risk_fraction <= 0.02):
+            raise ValueError("require 0 < risk_fraction <= hard_risk_fraction <= 2%")
         if not (0 < self.max_exposure_fraction <= 1):
             raise ValueError("max_exposure_fraction must be in (0, 1]")
         if not (0 < self.stop_loss_fraction < 1):
