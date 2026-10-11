@@ -97,3 +97,5 @@ def test_strict_mode_rejects_missing_quotes_even_if_volume_exists():
     )
     assert not result.eligible
     assert "missing_bid_ask" in result.reasons
+
+# Risk parity regression test added alongside the brain/backtest integration.
