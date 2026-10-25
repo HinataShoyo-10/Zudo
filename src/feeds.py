@@ -1,6 +1,7 @@
 import logging
 import queue
 import threading
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -97,6 +98,8 @@ class FyersTickSource:
 
         updates: queue.Queue[Tick] = queue.Queue()
         last_cumulative_volume: dict[str, int] = {}
+        last_tick_log: dict[str, float] = {}
+        last_wait_log = 0.0
         socket = None
 
         def on_message(message):
@@ -108,6 +111,14 @@ class FyersTickSource:
                 if not tick.volume_valid:
                     logger.debug("Volume not yet validated for %s; signals must abstain", tick.symbol)
                 updates.put(tick)
+                now = time.monotonic()
+                previous_log = last_tick_log.get(tick.symbol, 0.0)
+                if now - previous_log >= 60:
+                    logger.info(
+                        "FYERS tick received symbol=%s timestamp=%s price=%s volume_delta=%s volume_valid=%s",
+                        tick.symbol, tick.timestamp.isoformat(), tick.price, tick.volume, tick.volume_valid,
+                    )
+                    last_tick_log[tick.symbol] = now
             except Exception:
                 logger.exception("Could not normalize FYERS message: %r", message)
 
@@ -122,6 +133,7 @@ class FyersTickSource:
         def on_close(message):
             logger.warning("FYERS WebSocket closed: %s", message)
 
+        Path("logs").mkdir(parents=True, exist_ok=True)
         socket = data_ws.FyersDataSocket(
             access_token=f"{self.app_id}:{self.access_token}",
             log_path="logs",
@@ -135,4 +147,13 @@ class FyersTickSource:
         )
         threading.Thread(target=socket.connect, daemon=True).start()
         while True:
-            yield updates.get()
+            try:
+                yield updates.get(timeout=5)
+            except queue.Empty:
+                now = time.monotonic()
+                if now - last_wait_log >= 60:
+                    logger.info(
+                        "Waiting for FYERS ticks; socket may be connected but no updates have arrived yet. "
+                        "Check market hours, symbol subscription, and feed permissions."
+                    )
+                    last_wait_log = now
