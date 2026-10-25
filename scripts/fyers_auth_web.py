@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -12,6 +13,7 @@ from fyers_apiv3 import fyersModel
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env"
+TOKEN_UPDATED_KEY = "FYERS_ACCESS_TOKEN_UPDATED_AT"
 
 st.set_page_config(page_title="Zudo · FYERS Connect", page_icon="🔐", layout="centered")
 load_dotenv(ENV_PATH, override=False)
@@ -95,18 +97,25 @@ if st.session_state.fyers_auth_url:
                     st.error("FYERS did not return an access token. Check app settings and try a fresh login.")
                 else:
                     token = result["access_token"]
-                    lines = ENV_PATH.read_text().splitlines() if ENV_PATH.exists() else []
-                    replacement = "FYERS_ACCESS_TOKEN=" + token
-                    found = False
+                    token_updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
+                    replacements = {
+                        "FYERS_ACCESS_TOKEN": "FYERS_ACCESS_TOKEN=" + token,
+                        TOKEN_UPDATED_KEY: TOKEN_UPDATED_KEY + "=" + token_updated_at,
+                    }
+                    found = set()
                     new_lines = []
                     for line in lines:
-                        if line.startswith("FYERS_ACCESS_TOKEN="):
-                            new_lines.append(replacement)
-                            found = True
+                        key = line.split("=", 1)[0].strip() if "=" in line else ""
+                        if key in replacements:
+                            if key not in found:
+                                new_lines.append(replacements[key])
+                                found.add(key)
                         else:
                             new_lines.append(line)
-                    if not found:
-                        new_lines.append(replacement)
+                    for key, value in replacements.items():
+                        if key not in found:
+                            new_lines.append(value)
 
                     fd, temp_name = tempfile.mkstemp(prefix=".env.", dir=str(ROOT), text=True)
                     try:
@@ -120,7 +129,7 @@ if st.session_state.fyers_auth_url:
 
                     st.session_state.fyers_auth_url = None
                     st.session_state.fyers_state = secrets.token_urlsafe(24)
-                    st.success("Access token saved locally to the ignored .env file. Its value was not displayed.")
-                    st.caption("Access tokens expire; repeat this login when FYERS requires a fresh session.")
+                    st.success("Access token and its UTC update timestamp were saved locally to the ignored .env file. Secret values were not displayed.")
+                    st.caption("Zudo checks this timestamp at startup. Tokens older than 12 hours trigger a re-authenticate-or-continue prompt.")
         except Exception:
             st.error("Authentication failed. No credential values are shown here. Verify the redirect URI, app credentials and SDK installation, then retry.")
