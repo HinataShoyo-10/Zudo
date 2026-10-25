@@ -1,105 +1,211 @@
-# Zudo — Indian Intraday Market Data & Backtesting
+# Zudo Mini
 
-FYERS API v3 market-data starter plus an offline backtester and a read-only expired F&O data research pipeline. No order-placement code is included.
+A **read-only intraday market-data and signal research tool**. Zudo consumes FYERS market updates, builds candles, evaluates opening-range rules, and can send Telegram notifications. It does **not** place, modify, or cancel orders.
 
-## Does backtesting require the FYERS API?
+> Signals are experimental research candidates, not financial advice or proof of profitability. Validate market data, strategy behavior, slippage, charges, liquidity, and risk before considering any manual trade.
 
-**No.** The stock backtester reads local historical OHLCV CSV files. FYERS API is optional if you want to download historical candles programmatically.
+## What it does
+
+- Connects to the FYERS v3 data WebSocket for symbols in `config/watchlist.txt`.
+- Builds 1-minute and 5-minute candles.
+- Evaluates a 15-minute opening range, VWAP, relative volume, breakout persistence, and retests.
+- Sends early warnings and confirmed-candidate notifications to Telegram.
+- Includes historical-data utilities, backtests, validation tools, sample data, and unit tests.
+
+Default watchlist: `NSE:SBIN-EQ`. Check the current FYERS symbol master and configure the symbol you actually intend to monitor.
+
+## How the analysis works
+
+```text
+FYERS WebSocket -> normalized ticks -> 1m/5m candles
+                                     |
+                                     v
+                     opening range + VWAP + relative volume
+                                     |
+                                     v
+                    WAIT / EARLY_WARNING / CONFIRMED_CANDIDATE
+                                     |
+                                     v
+                       optional Telegram alert (no orders)
+```
+
+### Opening range and early warning
+
+The session is interpreted in India time. The opening range is the high and low of the first **15 minutes from 09:15 IST**. The engine waits for complete, aligned opening candles. After the range is finished, a live price crossing above the high or below the low may emit `EARLY_WARNING`. This is only a heads-up; it does not mean the other filters passed.
+
+### Confirmed 5-minute breakout
+
+A completed 5-minute candle can produce a research candidate when:
+
+1. It closes above the opening-range high (bullish) or below the low (bearish).
+2. Price is on the aligned side of session VWAP: above for bullish, below for bearish.
+3. Relative volume is at least **1.5x** the preceding **10** post-range bars.
+4. The close is not more than **0.3%** beyond the range boundary; extended breakouts are rejected instead of chased.
+
+These are provisional defaults, not tuned parameters. The volume comparison is a simple rolling baseline and is not time-of-day normalized.
+
+### Separate 1-minute paths
+
+The runner also evaluates two independent 1-minute hypotheses:
+
+- **Persistent breakout:** by default, two consecutive completed 1-minute closes outside the opening range, with VWAP, relative-volume, and chase filters.
+- **Breakout retest:** the previous candle has broken the range; the current completed candle retests the boundary within a default **0.15%** tolerance, then closes back outside with VWAP alignment, relative-volume confirmation, and no excessive extension.
+
+Backtest each path independently. One path passing does not validate the others.
+
+### Volume quality and abstention
+
+FYERS `vol_traded_today` is treated as a cumulative counter. Zudo computes deltas and marks the first observation or a counter reset as unverified. VWAP and relative-volume filters require verified positive volume. Incomplete candles, unavailable volume/VWAP, insufficient history, VWAP misalignment, and overextended breakouts return `WAIT` with a reason rather than forcing a candidate.
+
+The actual FYERS WebSocket fields and volume semantics still need verification using sanitized live samples. A connected socket alone does not prove the data or signals are correct.
+
+### Meaning of alerts and options limitations
+
+- `EARLY_WARNING`: boundary crossed; not confirmed.
+- `CONFIRMED_CANDIDATE`: a configured research rule passed; not a recommendation or executed trade.
+- `WAIT`: required data or conditions are not satisfied.
+
+The opening-range boundary is a reference/invalidation level, not a guaranteed stop. Index candles do not select an options contract. Before any manual options decision, independently check expiry, strike, lot size, live premium, bid/ask spread, liquidity, quote timestamp, slippage, all charges, and maximum loss. Reject stale/missing quotes rather than guessing.
+
+Implementation details: `src/orb_signals.py`, `src/signal_alert_runner.py`, and `docs/BALANCED_SIGNAL_ENGINE.md`.
 
 ## Requirements
 
-- Python 3.11+
-- FYERS API v3 app and valid access token for FYERS market data
-- Historical OHLCV data for offline research
+- Python 3.10+ recommended.
+- A FYERS developer app configured for the FYERS v3 API.
+- A Telegram bot and destination chat (optional if running without alerts).
+- Git and a terminal; GitHub Codespaces is supported.
 
-## Install
+## First-time setup
+
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/HinataShoyo-10/Zudo-mini.git
+cd Zudo-mini
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-python -m pytest -q
+python -m pip install -r requirements.txt
+```
+
+### 2. Create local credentials
+
+```bash
 cp .env.example .env
 ```
 
-## Offline backtesting (no API/token required)
+Edit `.env` locally; never commit or share it. Configure:
 
-The CSV must contain `timestamp,open,high,low,close,volume`. Timestamps should be ISO-8601; timestamps without a timezone are treated as IST. Rows must be strictly increasing with no duplicates.
+```dotenv
+FYERS_APP_ID=your_fyers_app_id
+FYERS_SECRET_ID=your_fyers_app_secret
+FYERS_REDIRECT_URI=https://127.0.0.1/
+FYERS_ACCESS_TOKEN=
+FYERS_ACCESS_TOKEN_UPDATED_AT=
+LOG_LEVEL=INFO
 
-```bash
-python -m src.backtest --csv data/example_ohlcv.csv
-python -m src.backtest --csv data/your_candles.csv
+Telegram_bot_token=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 
-The included `data/example_ohlcv.csv` is synthetic and is only a software smoke test. It is not real market data or evidence of profitability.
+The redirect URI must exactly match the value registered in the FYERS developer dashboard. The Telegram token may alternatively use the name `TELEGRAM_BOT_TOKEN`.
 
-Default strategy: long-only 9/21 EMA crossover, quantity 1, ₹100,000 starting equity, ₹20 estimated fee per side, and 5 basis points slippage per side. These are rough placeholders, not a complete representation of Indian market charges. Default backtests now enforce intraday session exits; output reports gross P&L, fees, slippage, net win rate, and drawdown separately.
+Verify that `.env` is ignored before entering secrets:
 
 ```bash
-python -m src.backtest --csv data/your_candles.csv --fast 5 --slow 20 --quantity 1 --cash 100000 --fee-per-side 20 --slippage-bps 5 --out backtest_output
+git check-ignore .env
 ```
 
-Output contains `trades.csv`, `equity_curve.csv`, and `summary.json`. Before interpreting results, validate real charges, slippage, liquidity, timestamps, session boundaries, and out-of-sample performance. Results do not guarantee future returns.
+It should print `.env`. If it does not, stop and fix `.gitignore`.
 
-## Download real historical stock candles from FYERS
-
-Keep `.env` ignored by Git. Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` locally:
+## Start everything with one command
 
 ```bash
-python -m src.fyers_history --symbol NSE:SBIN-EQ --resolution 5 --from-date 2025-01-01 --to-date 2025-01-31 --out data/sbin_5m.csv
+chmod +x start.sh
+./start.sh
 ```
 
-The downloader uses the history endpoint only and never places orders.
+The script checks the token timestamp, skips login when it is no more than 12 hours old, and asks whether to re-authenticate or continue when the token is missing, older than 12 hours, or the timestamp is invalid. When authenticating, it starts the local Streamlit helper; complete FYERS login in the official website, paste the full callback URL into the masked field, wait for the success message, then return to the terminal and press Enter. The script checks configuration, sends a Telegram test, then starts the read-only feed.
 
-## NIFTY expired options data (read-only research)
+The 12-hour check is an **age check**, not a live validation request to FYERS. For older `.env` files without a timestamp, the first run estimates it from the file modification time; that cannot establish the actual issue time. If you continue with an old token, FYERS may reject it.
 
-Use the separate documented workflow in [docs/OPTIONS_DATA.md](docs/OPTIONS_DATA.md). It uses FYERS' expired F&O endpoints to query expiry dates, list actual returned contract symbols, and download one contract's raw historical response. We intentionally save raw JSON until the current response schema has been inspected and tested.
+In Codespaces the auth helper binds to `127.0.0.1:8501`; open the private forwarded port if prompted. Do not expose the authentication page publicly.
 
-FYERS' current documentation says Standard API access has a limited daily allowance for intraday expired F&O historical requests. Check the current plan limits before collecting data; do not bulk-loop through every strike. Source: [FYERS API rate limits](https://support.fyers.in/portal/en/kb/articles/what-are-the-fyers-api-rate-limits-for-standard-and-prime-plans).
+## Manual authentication and startup
 
-## FYERS live market-data feed
+### A. Authenticate with FYERS
+
+With the virtual environment activated and `.env` configured:
 
 ```bash
-python -m src.main --source sample
+python -m streamlit run scripts/fyers_auth_web.py --server.address 127.0.0.1 --server.port 8501
+```
+
+Open the local page (or your private Codespaces forwarded port), click **Generate secure FYERS login link**, and complete login/verification on the official FYERS site. Paste the entire redirected URL into the masked field. The helper validates the returned `state`, exchanges the temporary authorization code, then saves `FYERS_ACCESS_TOKEN` and `FYERS_ACCESS_TOKEN_UPDATED_AT` to `.env`.
+
+Stop Streamlit with `Ctrl+C` after success. Never paste callback URLs, authorization codes, app secrets, access tokens, or Telegram tokens into chat, issues, logs, or commits.
+
+### B. Test Telegram
+
+```bash
+python -m src.telegram_alerts --test
+```
+
+This verifies Telegram delivery only; it does not validate the feed or trading logic.
+
+### C. Start the feed
+
+```bash
+python -m src.main --source fyers --telegram-alerts
+```
+
+Other modes:
+
+```bash
+# FYERS feed, no Telegram alerts
 python -m src.main --source fyers
+
+# Synthetic sample stream; not real market data
+python -m src.main --source sample
 ```
 
-The sample feed is synthetic. The live WebSocket adapter still needs validation against actual FYERS callbacks before unattended use. Do not enable live trading.
+Manual startup does not perform the 12-hour prompt from `start.sh`; it attempts to use the token currently in `.env`.
 
-## Layout
-
-- `src/backtest.py`: offline CSV backtester with intraday exits and cost reporting
-- `src/fyers_history.py`: standard historical OHLCV downloader
-- `src/fyers_expired_fno.py`: read-only expired F&O research data client
-- `src/validate_market_data.py`: one-command quality gate for the stock CSV and saved options API responses
-- `src/options_backtest.py`: research-only NIFTY opening-range breakout simulator for one specified call contract\n- `src/options_dynamic_backtest.py`: research-only dynamic nearest-ATM call selection with deterministic brain gates
-- `src/nifty_validation.py`: repeatable NIFTY historical validation report and slippage/strict-liquidity stress scenarios
-- `docs/OPTIONS_DATA.md`: NIFTY expired-options data steps, limits, and safety notes
-- `docs/RESEARCH_ROADMAP.md`: project validation gates
-- `tests/`: unit tests
-
-## Trading brain foundation
-
-See [docs/TRADING_BRAIN.md](docs/TRADING_BRAIN.md) for the deterministic decision pipeline and safety gates. The brain gates are integrated into the dynamic options backtester. OHLCV-only research explicitly flags missing bid/ask as liquidity-unverified; use strict mode when point-in-time quotes are available and required.
-
-### NIFTY historical validation and stress test
-
-After you have the local NIFTY index CSV and expired-options manifest, run the same strategy across multiple slippage assumptions and a strict quote-availability scenario:
+## Useful commands
 
 ```bash
-python -m src.nifty_validation \
-  --index-csv data/fyers_expired/nifty_index_5m.csv \
-  --contracts-manifest data/fyers_expired/nifty_calls_manifest.json \
-  --out backtest_output_nifty_validation
+# Unit tests
+python -m pytest -q
+
+# Sample OHLCV baseline backtest
+python -m src.backtest --csv data/example_ohlcv.csv
+
+# CLI help
+python -m src.main --help
+python -m src.backtest --help
+python -m src.nifty_validation --help
 ```
 
-Replace the index CSV path with the actual filename in your workspace. The manifest's option CSV paths are resolved relative to the manifest file. The report includes dataset coverage, per-scenario trades, P&L, and candidate diagnostics. It does not tune parameters or prove profitability. Outputs are ignored by Git.
+Tests validate code behavior on their test data, not profitability. Review `docs/OPTIONS_DATA.md`, `docs/RESEARCH_ROADMAP.md`, and `docs/TRADING_BRAIN.md` before interpreting historical results.
 
-## Safety and limitations
+## Configuration and troubleshooting
 
-- The EMA crossover is only a baseline, not a validated strategy.
-- Historical OHLC data alone cannot reconstruct real bid/ask fills or exact intrabar stop order.
-- Costs must include all applicable brokerage and regulatory charges, not just a flat fee.
-- Planned risk per trade is not guaranteed maximum loss during gaps or poor fills.
-- No live orders are included in this project.
+- Watchlist: `config/watchlist.txt`, one FYERS symbol per line.
+- Credentials: repository-root `.env`; never commit it.
+- Token timestamp: `FYERS_ACCESS_TOKEN_UPDATED_AT`, stored as UTC ISO time.
+- Auth logs: `logs/fyers_auth.log`.
+- Signal defaults: `ORBConfig` in `src/orb_signals.py`.
+
+If authentication fails, check the app credentials and exact redirect URI, then generate a fresh login link. If no ticks arrive, verify market hours, symbol spelling, subscription, and token validity; an idle socket outside market hours can be normal. If no alerts arrive, the engine may be abstaining because its opening range, volume, VWAP, or relative-volume history is incomplete. If Telegram testing fails, check the bot token and chat ID without printing them.
+
+## Safety and known limitations
+
+- No live order-placement capability is included.
+- Live FYERS volume interpretation and candle aggregation require validation.
+- Index signals alone cannot determine option premium, spread, liquidity, or a suitable contract.
+- Historical OHLC data cannot fully model real bid/ask fills or intrabar stop execution.
+- Include brokerage, taxes, regulatory charges, spread, slippage, and gaps in risk analysis.
+- No alert or backtest result guarantees future performance.
+
+See the `docs/` directory for deeper implementation and research notes.

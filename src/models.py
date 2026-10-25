@@ -9,6 +9,7 @@ class Tick:
     timestamp: datetime
     price: Decimal
     volume: int = 0
+    volume_valid: bool = True
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -32,3 +33,4 @@ class Candle:
     close: Decimal
     volume: int
     ticks: int
+    volume_valid: bool = True

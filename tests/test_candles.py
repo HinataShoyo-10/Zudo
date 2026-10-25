@@ -46,3 +46,20 @@ def test_out_of_order_rejected():
     builder.update(make_tick(16, "100", 10))
     with pytest.raises(ValueError, match="out-of-order"):
         builder.update(make_tick(16, "101", 5))
+
+
+
+def test_volume_deltas_are_summed_and_validity_is_preserved():
+    builder = CandleBuilder()
+    first = Tick("TEST", datetime(2026, 10, 12, 9, 15, tzinfo=IST),
+                 Decimal("100"), 0, False)
+    second = Tick("TEST", datetime(2026, 10, 12, 9, 16, tzinfo=IST),
+                  Decimal("101"), 12, True)
+    rollover = Tick("TEST", datetime(2026, 10, 12, 9, 20, tzinfo=IST),
+                    Decimal("102"), 3, True)
+    builder.update(first)
+    builder.update(second)
+    candle = builder.update(rollover)
+    assert candle is not None
+    assert candle.volume == 12
+    assert candle.volume_valid is False
