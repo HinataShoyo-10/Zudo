@@ -147,7 +147,7 @@ def evaluate_completed_candles(
                          range_high, range_low)
     current = post_range[-1]
     vwap = _session_vwap(session)
-    rel_volume = _relative_volume(session, config.volume_lookback)
+    rel_volume = _relative_volume(post_range, config.volume_lookback)
     if vwap is None:
         return ORBSignal("WAIT", None, interval_minutes, timestamp, "vwap_unavailable_volume_unverified",
                          range_high, range_low, relative_volume=rel_volume, reference_price=current.close)
@@ -230,3 +230,62 @@ def evaluate_early_warning(
                          range_high, range_low, reference_price=last_price, invalidation_level=range_low)
     return ORBSignal("WAIT", None, 5, timestamp, "price_inside_opening_range",
                      range_high, range_low, reference_price=last_price)
+
+
+def evaluate_one_minute_retest(
+    candles: Sequence[Candle],
+    config: ORBConfig = ORBConfig(),
+) -> ORBSignal:
+    """Detect a completed 1m retest after a prior breakout; research-only candidate."""
+    config.validate()
+    session = _session_candles(candles, 1)
+    timestamp = session[-1].end if session else (candles[-1].end if candles else datetime.now(IST))
+    if not session:
+        return ORBSignal("WAIT", None, 1, timestamp, "no_session_candles")
+    opening = _opening_range(session, 1, config)
+    if opening is None:
+        return ORBSignal("WAIT", None, 1, timestamp, "opening_range_incomplete_or_volume_unverified")
+    range_high, range_low, range_end = opening
+    post_range = [c for c in session if c.start >= range_end]
+    if len(post_range) < 2:
+        return ORBSignal("WAIT", None, 1, timestamp, "retest_history_incomplete",
+                         range_high, range_low)
+    previous, current = post_range[-2], post_range[-1]
+    vwap = _session_vwap(session)
+    rel_volume = _relative_volume(post_range, config.volume_lookback)
+    if vwap is None:
+        return ORBSignal("WAIT", None, 1, timestamp, "vwap_unavailable_volume_unverified",
+                         range_high, range_low, relative_volume=rel_volume, reference_price=current.close)
+    if rel_volume is None:
+        return ORBSignal("WAIT", None, 1, timestamp, "relative_volume_warmup_or_missing",
+                         range_high, range_low, vwap, reference_price=current.close)
+
+    tolerance = config.retest_tolerance_fraction
+    bullish_retest = (
+        previous.close > range_high
+        and current.low <= range_high * (Decimal("1") + tolerance)
+        and current.close > range_high
+        and current.close > vwap
+    )
+    bearish_retest = (
+        previous.close < range_low
+        and current.high >= range_low * (Decimal("1") - tolerance)
+        and current.close < range_low
+        and current.close < vwap
+    )
+    if not bullish_retest and not bearish_retest:
+        return ORBSignal("WAIT", None, 1, timestamp, "no_valid_breakout_retest",
+                         range_high, range_low, vwap, rel_volume, current.close)
+    if rel_volume < config.min_relative_volume:
+        return ORBSignal("WAIT", "BULLISH" if bullish_retest else "BEARISH", 1, timestamp,
+                         "relative_volume_below_threshold", range_high, range_low, vwap,
+                         rel_volume, current.close, range_high if bullish_retest else range_low)
+    direction: Direction = "BULLISH" if bullish_retest else "BEARISH"
+    level = range_high if bullish_retest else range_low
+    distance = abs(current.close - level) / level
+    if distance > config.max_chase_fraction:
+        return ORBSignal("WAIT", direction, 1, timestamp, "breakout_too_extended_do_not_chase",
+                         range_high, range_low, vwap, rel_volume, current.close, level)
+    return ORBSignal("CONFIRMED_CANDIDATE", direction, 1, timestamp,
+                     "one_minute_retest_confirmed_research_only", range_high, range_low,
+                     vwap, rel_volume, current.close, level)
