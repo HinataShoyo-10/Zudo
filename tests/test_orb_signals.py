@@ -73,3 +73,12 @@ def test_empty_input_returns_wait():
     signal = evaluate_completed_candles([], 5)
     assert signal.status == "WAIT"
     assert signal.reason == "no_session_candles"
+
+
+
+def test_one_minute_path_is_separately_callable_and_abstains_without_history():
+    from src.orb_signals import evaluate_one_minute_retest
+
+    signal = evaluate_one_minute_retest([], ORBConfig())
+    assert signal.status == "WAIT"
+    assert signal.timeframe_minutes == 1
