@@ -152,7 +152,7 @@ def evaluate_completed_candles(
                          range_high, range_low)
     current = post_range[-1]
     if current.volume <= 0 or not current.volume_valid:
-        return ORBSignal("WAIT", None, interval_minutes, timestamp, "current_candle_volume_unverified",
+        return ORBSignal("WAIT", None, interval_minutes, timestamp, "vwap_unavailable_volume_unverified",
                          range_high, range_low, reference_price=current.close)
     vwap = _session_vwap(session)
     rel_volume = _relative_volume(post_range, config.volume_lookback)
