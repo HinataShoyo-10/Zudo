@@ -62,6 +62,16 @@ FYERS' current documentation says Standard API access has a limited daily allowa
 
 See [docs/BALANCED_SIGNAL_ENGINE.md](docs/BALANCED_SIGNAL_ENGINE.md). The pure signal evaluators live in `src/orb_signals.py`; they provide early warnings, a completed 5-minute ORB path, and separately callable 1-minute breakout/retest research paths. They do not place orders or send Telegram messages. Live volume signals remain untrusted until the FYERS callback fields and cumulative-volume deltas are verified against real sanitized feed captures.
 
+## Telegram notifications (manual setup; no trading execution)
+
+Set the Telegram bot token in your local `.env` as `Telegram_bot_token=...` (the uppercase alias `TELEGRAM_BOT_TOKEN` is also accepted) and set `TELEGRAM_CHAT_ID`. Never commit `.env` or paste the token into source control or chat.
+
+1. Open your bot in Telegram, press **Start**, and send it a message.
+2. In Codespaces run `python -m src.telegram_alerts --discover-chat-id`, then copy the displayed chat ID into `TELEGRAM_CHAT_ID` in `.env`.
+3. Run `python -m src.telegram_alerts --test` and confirm the test message arrives.
+
+The notification client is deliberately separate from market-data ingestion. It currently supports test messages and formatting early/confirmed/wait alerts; it is not yet wired to live signal evaluation. A confirmed candidate is not an order instruction, and no orders are placed.
+
 ## FYERS live market-data feed
 
 ```bash
@@ -75,6 +85,7 @@ The sample feed is synthetic. The live WebSocket adapter still needs validation 
 
 - `src/backtest.py`: offline CSV backtester with intraday exits and cost reporting
 - `src/orb_signals.py`: balanced ORB signal evaluators (research-only)
+- `src/telegram_alerts.py`: Telegram notification client and setup/test commands
 - `docs/BALANCED_SIGNAL_ENGINE.md`: signal rules, data caveats, and validation gates
 - `src/fyers_history.py`: standard historical OHLCV downloader
 - `src/fyers_expired_fno.py`: read-only expired F&O research data client
