@@ -70,14 +70,17 @@ Set the Telegram bot token in your local `.env` as `Telegram_bot_token=...` (the
 2. In Codespaces run `python -m src.telegram_alerts --discover-chat-id`, then copy the displayed chat ID into `TELEGRAM_CHAT_ID` in `.env`.
 3. Run `python -m src.telegram_alerts --test` and confirm the test message arrives.
 
-The notification client is deliberately separate from market-data ingestion. It currently supports test messages and formatting early/confirmed/wait alerts; it is not yet wired to live signal evaluation. A confirmed candidate is not an order instruction, and no orders are placed.
+The notification client can be used standalone for setup checks, or enabled with the live feed to receive early warnings and confirmed research candidates. It deduplicates repeated early warnings per direction/session and candidate alerts per candle/path. Telegram failures are logged and do not intentionally stop feed processing. A confirmed candidate is not an order instruction, and no orders are placed.
 
 ## FYERS live market-data feed
 
 ```bash
 python -m src.main --source sample
 python -m src.main --source fyers
+python -m src.main --source fyers --telegram-alerts
 ```
+
+Use `--telegram-alerts` only after confirming FYERS credentials and symbol configuration. The sample feed is synthetic and does not generate valid-volume trading signals. Signal alerts remain research-only: live FYERS callback fields, volume deltas, and the complete strategy still require session validation before relying on them.
 
 The sample feed is synthetic. The live WebSocket adapter still needs validation against actual FYERS callbacks before unattended use. Do not enable live trading.
 
