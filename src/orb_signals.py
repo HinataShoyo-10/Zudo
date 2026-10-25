@@ -95,13 +95,13 @@ def _opening_range(
         expected_start = first_start.timestamp() + index * interval_minutes * 60
         if candle.start.astimezone(IST).timestamp() != expected_start:
             return None
-        if candle.volume <= 0:
+        if candle.volume <= 0 or not candle.volume_valid:
             return None
     return max(c.high for c in opening), min(c.low for c in opening), opening[-1].end
 
 
 def _session_vwap(candles: Sequence[Candle]) -> Decimal | None:
-    if not candles or any(c.volume <= 0 for c in candles):
+    if not candles or any(c.volume <= 0 or not c.volume_valid for c in candles):
         return None
     total_volume = sum(c.volume for c in candles)
     if total_volume <= 0:
@@ -117,7 +117,7 @@ def _relative_volume(candles: Sequence[Candle], lookback: int) -> Decimal | None
     if len(candles) < lookback + 1:
         return None
     previous = candles[-lookback - 1:-1]
-    if any(c.volume <= 0 for c in previous) or candles[-1].volume <= 0:
+    if any(c.volume <= 0 or not c.volume_valid for c in previous) or candles[-1].volume <= 0 or not candles[-1].volume_valid:
         return None
     average = Decimal(sum(c.volume for c in previous)) / Decimal(lookback)
     if average <= 0:
