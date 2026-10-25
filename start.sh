@@ -23,33 +23,119 @@ fi
 
 mkdir -p logs
 
-echo
-echo "=== Zudo: FYERS authentication ==="
-echo "Starting the local FYERS login helper on http://127.0.0.1:8501"
-echo "Use the forwarded port in Codespaces if prompted."
-echo "Complete the official FYERS sign-in in your browser; never share your password, PIN, OTP, or tokens."
-echo "After the page confirms the token was saved, return here and press Enter."
-echo
+run_fyers_auth() {
+  echo
+  echo "=== Zudo: FYERS authentication ==="
+  echo "Starting the local FYERS login helper on http://127.0.0.1:8501"
+  echo "Use the forwarded port in Codespaces if prompted."
+  echo "Complete the official FYERS sign-in in your browser; never share your password, PIN, OTP, or tokens."
+  echo "After the page confirms the token was saved, return here and press Enter."
+  echo
 
-"$PYTHON" -m streamlit run scripts/fyers_auth_web.py \
-  --server.address 127.0.0.1 \
-  --server.port 8501 \
-  --server.headless true \
-  > logs/fyers_auth.log 2>&1 &
-AUTH_PID=$!
+  "$PYTHON" -m streamlit run scripts/fyers_auth_web.py \
+    --server.address 127.0.0.1 \
+    --server.port 8501 \
+    --server.headless true \
+    > logs/fyers_auth.log 2>&1 &
+  AUTH_PID=$!
 
-cleanup() {
-  if kill -0 "$AUTH_PID" 2>/dev/null; then
-    kill "$AUTH_PID" 2>/dev/null || true
-    wait "$AUTH_PID" 2>/dev/null || true
-  fi
+  cleanup_auth() {
+    if kill -0 "$AUTH_PID" 2>/dev/null; then
+      kill "$AUTH_PID" 2>/dev/null || true
+      wait "$AUTH_PID" 2>/dev/null || true
+    fi
+  }
+  trap cleanup_auth EXIT INT TERM
+
+  read -r -p "Press Enter after FYERS reports that the access token was saved (Ctrl+C to cancel)..." _
+
+  cleanup_auth
+  trap - EXIT INT TERM
 }
-trap cleanup EXIT INT TERM
 
-read -r -p "Press Enter after FYERS reports that the access token was saved (Ctrl+C to cancel)..." _
+echo "=== Zudo: checking FYERS token age ==="
+TOKEN_CHECK="$("$PYTHON" - <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+import tempfile
+from dotenv import dotenv_values
 
-cleanup
-trap - EXIT INT TERM
+env_path = Path(".env")
+env = dotenv_values(env_path)
+token = (env.get("FYERS_ACCESS_TOKEN") or "").strip()
+stamp_key = "FYERS_ACCESS_TOKEN_UPDATED_AT"
+stamp = (env.get(stamp_key) or "").strip()
+
+if not token:
+    print("No FYERS access token is configured.")
+    print("MISSING")
+    raise SystemExit(0)
+
+if not stamp:
+    # One-time migration for existing .env files: this is an estimate because
+    # older versions did not record the token's own update time.
+    stamp_dt = datetime.fromtimestamp(env_path.stat().st_mtime, tz=timezone.utc)
+    stamp = stamp_dt.isoformat(timespec="seconds")
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    lines = [line for line in lines if not line.strip().startswith(stamp_key + "=")]
+    lines.append(f"{stamp_key}={stamp}")
+    fd, temp_name = tempfile.mkstemp(prefix=".env.", dir=str(env_path.parent), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write("\n".join(lines) + "\n")
+        os.chmod(temp_name, 0o600)
+        os.replace(temp_name, env_path)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+    print("No token timestamp existed; initialized an estimated timestamp from the existing .env file modification time.")
+
+try:
+    updated_at = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    updated_at = updated_at.astimezone(timezone.utc)
+    age_hours = max(0.0, (datetime.now(timezone.utc) - updated_at).total_seconds() / 3600)
+except (TypeError, ValueError):
+    print("Stored token timestamp is invalid.")
+    print("STALE")
+    raise SystemExit(0)
+
+print("Last token update (UTC): " + updated_at.strftime("%Y-%m-%d %H:%M:%S UTC"))
+print(f"Token age: {age_hours:.1f} hours")
+print("STALE" if age_hours > 12 else "FRESH")
+PY
+)"
+printf "%s\n" "$TOKEN_CHECK"
+TOKEN_STATUS="${TOKEN_CHECK##*$'\n'}"
+
+case "$TOKEN_STATUS" in
+  MISSING)
+    echo "No existing token found; authentication is required."
+    run_fyers_auth
+    ;;
+  STALE)
+    echo
+    echo "The token timestamp is more than 12 hours old (or invalid)."
+    read -r -p "Re-authenticate now? [y/N]: " REAUTH_CHOICE
+    case "$REAUTH_CHOICE" in
+      y|Y|yes|YES)
+        run_fyers_auth
+        ;;
+      *)
+        echo "Continuing with the existing token as requested. FYERS may reject it if it has expired."
+        ;;
+    esac
+    ;;
+  FRESH)
+    echo "Token is within the 12-hour window; skipping authentication."
+    ;;
+  *)
+    echo "ERROR: Could not determine FYERS token status."
+    exit 1
+    ;;
+esac
 
 echo
 echo "Checking required configuration without displaying secret values..."
