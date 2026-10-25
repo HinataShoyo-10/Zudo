@@ -97,13 +97,16 @@ def _opening_range(
         expected_start = first_start.timestamp() + index * interval_minutes * 60
         if candle.start.astimezone(IST).timestamp() != expected_start:
             return None
-        if candle.volume <= 0 or not candle.volume_valid:
-            return None
+    # Opening-range levels are price-only; FYERS' first cumulative-volume
+    # observation may be unverified even though its OHLC prices are usable.
     return max(c.high for c in opening), min(c.low for c in opening), opening[-1].end
 
 
 def _session_vwap(candles: Sequence[Candle]) -> Decimal | None:
-    if not candles or any(c.volume <= 0 or not c.volume_valid for c in candles):
+    # Use verified deltas only. The first candle can be excluded because the
+    # initial cumulative counter reading has no reconstructable delta.
+    candles = [c for c in candles if c.volume > 0 and c.volume_valid]
+    if not candles:
         return None
     total_volume = sum(c.volume for c in candles)
     if total_volume <= 0:
@@ -148,6 +151,9 @@ def evaluate_completed_candles(
         return ORBSignal("WAIT", None, interval_minutes, timestamp, "opening_range_not_finished",
                          range_high, range_low)
     current = post_range[-1]
+    if current.volume <= 0 or not current.volume_valid:
+        return ORBSignal("WAIT", None, interval_minutes, timestamp, "current_candle_volume_unverified",
+                         range_high, range_low, reference_price=current.close)
     vwap = _session_vwap(session)
     rel_volume = _relative_volume(post_range, config.volume_lookback)
     if vwap is None:
