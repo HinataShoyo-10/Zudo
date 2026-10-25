@@ -58,7 +58,7 @@ Use the separate documented workflow in [docs/OPTIONS_DATA.md](docs/OPTIONS_DATA
 
 FYERS' current documentation says Standard API access has a limited daily allowance for intraday expired F&O historical requests. Check the current plan limits before collecting data; do not bulk-loop through every strike. Source: [FYERS API rate limits](https://support.fyers.in/portal/en/kb/articles/what-are-the-fyers-api-rate-limits-for-standard-and-prime-plans).
 
-## FYERS live market-data feed
+## Balanced NIFTY signal engine (research-only)\n\nSee [docs/BALANCED_SIGNAL_ENGINE.md](docs/BALANCED_SIGNAL_ENGINE.md). The pure signal evaluators live in `src/orb_signals.py`; they provide early warnings, a completed 5-minute ORB path, and separately callable 1-minute breakout/retest research paths. They do not place orders or send Telegram messages. Live volume signals remain untrusted until the FYERS callback fields and cumulative-volume deltas are verified against real sanitized feed captures.\n\n## FYERS live market-data feed
 
 ```bash
 python -m src.main --source sample
@@ -69,7 +69,7 @@ The sample feed is synthetic. The live WebSocket adapter still needs validation 
 
 ## Layout
 
-- `src/backtest.py`: offline CSV backtester with intraday exits and cost reporting
+- `src/backtest.py`: offline CSV backtester with intraday exits and cost reporting\n- `src/orb_signals.py`: balanced ORB signal evaluators (research-only)\n- `docs/BALANCED_SIGNAL_ENGINE.md`: signal rules, data caveats, and validation gates
 - `src/fyers_history.py`: standard historical OHLCV downloader
 - `src/fyers_expired_fno.py`: read-only expired F&O research data client
 - `src/validate_market_data.py`: one-command quality gate for the stock CSV and saved options API responses
