@@ -5,19 +5,21 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import requests
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-DEFAULT_ENV_FILE = "/workspaces/Zudo/.env"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_ENV_FILE = ROOT_DIR / ".env"
 
 
 def load_telegram_config() -> tuple[str, str]:
     """Load local Telegram settings without printing or exposing the bot token."""
     load_dotenv()
-    if os.path.isfile(DEFAULT_ENV_FILE):
+    if DEFAULT_ENV_FILE.is_file():
         load_dotenv(DEFAULT_ENV_FILE, override=False)
     token = (
         os.getenv("Telegram_bot_token", "").strip()
@@ -129,50 +131,3 @@ def format_signal_alert(signal: Any, symbol: str = "NIFTY 50") -> str:
         lines.append("Action: Heads-up only. Not a confirmed entry.")
     elif status == "CONFIRMED_CANDIDATE":
         lines.append("Action: Candidate only. Check option quote, spread, liquidity and risk before any manual trade.")
-    else:
-        lines.append("Action: WAIT. No trade signal.")
-    lines.append("No order was placed.")
-    return "\n".join(lines)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Zudo Telegram notification setup/test")
-    parser.add_argument("--test", action="store_true", help="send a test message to TELEGRAM_CHAT_ID")
-    parser.add_argument("--discover-chat-id", action="store_true",
-                        help="show chat IDs from recent bot updates (message the bot first)")
-    args = parser.parse_args()
-    if not args.test and not args.discover_chat_id:
-        parser.error("choose --test or --discover-chat-id")
-
-    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
-                        format="%(asctime)s %(levelname)s %(message)s")
-    try:
-        # Chat ID is only required for sending, not discovery.
-        load_dotenv()
-        if os.path.isfile(DEFAULT_ENV_FILE):
-            load_dotenv(DEFAULT_ENV_FILE, override=False)
-        token = (os.getenv("Telegram_bot_token", "").strip()
-                 or os.getenv("TELEGRAM_BOT_TOKEN", "").strip())
-        if not token:
-            raise ValueError("Missing Telegram_bot_token in .env")
-        client = TelegramAlerter(token, os.getenv("TELEGRAM_CHAT_ID", "discovery-only"))
-        if args.discover_chat_id:
-            chats = client.discover_chat_ids()
-            if not chats:
-                print("No chats found. Open your bot in Telegram, press Start, send it a message, then retry.")
-                return 1
-            for chat in chats:
-                print(f"chat_id={chat['chat_id']} type={chat['type']} title={chat['title']}")
-            return 0
-        _, chat_id = load_telegram_config()
-        client = TelegramAlerter(token, chat_id)
-        client.send_test()
-        print("Telegram test message sent. Check your Telegram chat.")
-        return 0
-    except (ValueError, requests.RequestException, RuntimeError) as exc:
-        print(f"Telegram setup failed: {exc}", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
