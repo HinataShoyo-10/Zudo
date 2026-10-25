@@ -45,6 +45,7 @@ class SignalAlertRunner:
             self._active_date = session_date
             # Histories are session-scoped; prevent stale prior-day candles being reused.
             self._candles = {1: {}, 5: {}}
+            self._builders = {1: CandleBuilder(1), 5: CandleBuilder(5)}
 
         emitted: list[ORBSignal] = []
         completed_by_interval: dict[int, Candle] = {}
