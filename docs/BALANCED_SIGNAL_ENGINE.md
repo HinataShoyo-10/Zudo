@@ -2,12 +2,12 @@
 
 ## Design
 
-Zudo now has a pure, read-only ORB signal module in `src/orb_signals.py`. It does not place orders and does not yet send Telegram messages.
+Zudo now has a pure, read-only ORB signal module in `src/orb_signals.py`. It does not place orders. `src/signal_alert_runner.py` connects it to the optional Telegram sender; enable this explicitly with `python -m src.main --source fyers --telegram-alerts`.
 
 - **Early warning:** a live last price crossing the completed 15-minute opening range can emit `EARLY_WARNING`. This is informational only; it intentionally does not claim that volume/VWAP filters passed.
 - **Primary path:** completed 5-minute candle breakout, session VWAP alignment, relative-volume threshold, and a maximum extension/chase check.
-- **Separate fast path:** completed 1-minute candles use the same 15-minute opening range, VWAP and relative-volume filters, plus consecutive closes outside the range; a separate completed-candle retest evaluator is also available. Both must be backtested independently and is not automatically enabled in a live service.
-- **No trade:** invalid/missing volume, incomplete opening range, insufficient relative-volume warm-up, VWAP misalignment, and overextended breakouts return `WAIT` with a reason.
+- **Separate fast path:** completed 1-minute candles use the same 15-minute opening range, VWAP and relative-volume filters, plus consecutive closes outside the range; a separate completed-candle retest evaluator is also available. Both must be backtested independently; the alert runner currently evaluates both paths when Telegram alerts are enabled.
+- **No trade:** missing/unverified current volume, incomplete opening range, insufficient relative-volume warm-up, VWAP misalignment, and overextended breakouts return `WAIT` with a reason. Opening-range levels are price-only; VWAP uses only candles with verified positive volume deltas.
 - **Invalidation:** the opening-range boundary is returned as a reference/invalidation level. It is not a guaranteed stop price or an order instruction.
 
 Defaults are provisional research parameters, not tuned or evidence of profitability: 15-minute opening range, relative volume at least 1.5x the preceding 10 bars, and maximum breakout extension of 0.3%. The relative-volume comparison is a simple rolling baseline, not time-of-day normalized. This should be improved or explicitly accepted before evaluation.
@@ -24,4 +24,4 @@ Index candles can identify directional setups but cannot choose an option contra
 python -m pytest -q
 ```
 
-The unit tests use synthetic candles only and validate code behavior, not strategy profitability. Next steps are a sanitized live-feed capture test, historical 1-minute and 5-minute signal replay, cost-aware independent backtests, and then paper alerts. Telegram and live trading are not connected by this module.
+The unit tests use synthetic candles only and validate code behavior, not strategy profitability. Next steps are a sanitized live-feed capture test, historical 1-minute and 5-minute signal replay, cost-aware independent backtests, and then paper alerts. Telegram delivery is wired to the live signal runner, but live FYERS feed behavior and strategy outputs remain unvalidated; no order placement is present.
