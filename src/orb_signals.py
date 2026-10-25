@@ -61,7 +61,9 @@ def _session_candles(candles: Sequence[Candle], interval_minutes: int) -> list[C
         raise ValueError("Only 1-minute and 5-minute candles are supported")
     if not candles:
         return []
-    ordered = sorted(candles, key=lambda candle: candle.start)
+    ordered = list(candles)
+    if any(current.start <= previous.start for previous, current in zip(ordered, ordered[1:])):
+        raise ValueError("Candles must have unique, increasing timestamps")
     latest_date = ordered[-1].start.astimezone(IST).date()
     selected = [
         candle for candle in ordered
