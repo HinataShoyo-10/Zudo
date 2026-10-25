@@ -32,7 +32,7 @@ echo "After the page confirms the token was saved, return here and press Enter."
 echo
 
 "$PYTHON" -m streamlit run scripts/fyers_auth_web.py \
-  --server.address 0.0.0.0 \
+  --server.address 127.0.0.1 \
   --server.port 8501 \
   --server.headless true \
   > logs/fyers_auth.log 2>&1 &
