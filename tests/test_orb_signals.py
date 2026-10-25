@@ -9,13 +9,13 @@ IST = ZoneInfo("Asia/Kolkata")
 
 
 def make_candle(minute, o, h, l, c, volume, interval=5, day=12):
-    start = datetime(2026, 10, day, 9, minute, tzinfo=IST)
+    start = datetime(2026, 10, day, 9, 15, tzinfo=IST) + timedelta(minutes=minute - 15)
     return Candle("NSE:NIFTY50-INDEX", start, start + timedelta(minutes=interval),
                   Decimal(str(o)), Decimal(str(h)), Decimal(str(l)), Decimal(str(c)),
                   volume, 5)
 
 
-def five_minute_history(last_close="101", last_volume=200):
+def five_minute_history(last_close="101.2", last_volume=200):
     bars = [
         make_candle(15, 99, 100, 98, 99, 100),
         make_candle(20, 99, 101, 99, 100, 100),
