@@ -6,7 +6,7 @@ Zudo now has a pure, read-only ORB signal module in `src/orb_signals.py`. It doe
 
 - **Early warning:** a live last price crossing the completed 15-minute opening range can emit `EARLY_WARNING`. This is informational only; it intentionally does not claim that volume/VWAP filters passed.
 - **Primary path:** completed 5-minute candle breakout, session VWAP alignment, relative-volume threshold, and a maximum extension/chase check.
-- **Separate fast path:** completed 1-minute candles use the same 15-minute opening range, VWAP and relative-volume filters, plus consecutive closes outside the range. It must be backtested independently and is not automatically enabled in a live service.
+- **Separate fast path:** completed 1-minute candles use the same 15-minute opening range, VWAP and relative-volume filters, plus consecutive closes outside the range; a separate completed-candle retest evaluator is also available. Both must be backtested independently and is not automatically enabled in a live service.
 - **No trade:** invalid/missing volume, incomplete opening range, insufficient relative-volume warm-up, VWAP misalignment, and overextended breakouts return `WAIT` with a reason.
 - **Invalidation:** the opening-range boundary is returned as a reference/invalidation level. It is not a guaranteed stop price or an order instruction.
 
