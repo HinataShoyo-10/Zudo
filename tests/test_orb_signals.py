@@ -82,3 +82,21 @@ def test_one_minute_path_is_separately_callable_and_abstains_without_history():
     signal = evaluate_one_minute_retest([], ORBConfig())
     assert signal.status == "WAIT"
     assert signal.timeframe_minutes == 1
+
+
+
+def test_one_minute_retest_candidate_requires_prior_breakout_and_filters():
+    from src.orb_signals import evaluate_one_minute_retest
+
+    bars = []
+    for minute in range(15, 30):
+        bars.append(make_candle(minute, 100, 101, 99, 100, 100, interval=1))
+    for minute in range(30, 40):
+        bars.append(make_candle(minute, 100, 100.5, 99.5, 100.2, 100, interval=1))
+    bars.append(make_candle(40, 100.8, 101.4, 100.7, 101.2, 100, interval=1))
+    bars.append(make_candle(41, 101.2, 101.4, 101.0, 101.2, 200, interval=1))
+
+    signal = evaluate_one_minute_retest(bars)
+    assert signal.status == "CONFIRMED_CANDIDATE"
+    assert signal.direction == "BULLISH"
+    assert signal.reason == "one_minute_retest_confirmed_research_only"
