@@ -102,6 +102,7 @@ except (TypeError, ValueError):
     print("STALE")
     raise SystemExit(0)
 
+print("Last token update (local): " + updated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"))
 print("Last token update (UTC): " + updated_at.strftime("%Y-%m-%d %H:%M:%S UTC"))
 print(f"Token age: {age_hours:.1f} hours")
 print("STALE" if age_hours > 12 else "FRESH")
