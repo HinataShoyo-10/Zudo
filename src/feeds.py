@@ -40,6 +40,48 @@ def load_watchlist(path: str = "config/watchlist.txt") -> list[str]:
     return symbols
 
 
+def normalize_fyers_message(
+    message: dict,
+    last_cumulative_volume: dict[str, int],
+) -> Tick | None:
+    """Normalize a full-mode FYERS SymbolUpdate message.
+
+    FYERS' vol_traded_today is treated as a cumulative counter. The first observed
+    value and counter resets are marked invalid because their true per-candle delta
+    cannot be reconstructed from that single message. Missing volume is never
+    silently converted into valid zero volume.
+    """
+    if not isinstance(message, dict):
+        return None
+    symbol, price = message.get("symbol"), message.get("ltp")
+    if not symbol or price is None:
+        return None
+    raw_ts = message.get("last_traded_time") or message.get("tt")
+    try:
+        timestamp = datetime.fromtimestamp(float(raw_ts), tz=IST) if raw_ts else datetime.now(IST)
+    except (TypeError, ValueError, OSError, OverflowError):
+        timestamp = datetime.now(IST)
+
+    volume_valid = False
+    volume_delta = 0
+    raw_volume = message.get("vol_traded_today")
+    if raw_volume is not None:
+        try:
+            cumulative = int(raw_volume)
+            if cumulative >= 0:
+                previous = last_cumulative_volume.get(str(symbol))
+                last_cumulative_volume[str(symbol)] = cumulative
+                if previous is not None and cumulative >= previous:
+                    volume_delta = cumulative - previous
+                    volume_valid = True
+                elif previous is not None and cumulative < previous:
+                    logger.warning("FYERS cumulative volume reset for %s; marking this update invalid", symbol)
+        except (TypeError, ValueError, OverflowError):
+            logger.debug("Invalid FYERS volume field for %s: %r", symbol, raw_volume)
+
+    return Tick(str(symbol), timestamp, Decimal(str(price)), volume_delta, volume_valid)
+
+
 class FyersTickSource:
     """Initial FYERS v3 Data WebSocket adapter. Read-only; no order API usage."""
 
@@ -54,23 +96,18 @@ class FyersTickSource:
         from fyers_apiv3.FyersWebsocket import data_ws
 
         updates: queue.Queue[Tick] = queue.Queue()
+        last_cumulative_volume: dict[str, int] = {}
         socket = None
 
         def on_message(message):
             try:
-                if not isinstance(message, dict):
-                    logger.debug("Ignoring non-dict FYERS message: %r", message)
+                tick = normalize_fyers_message(message, last_cumulative_volume)
+                if tick is None:
+                    logger.debug("Ignoring unsupported FYERS message: %r", message)
                     return
-                symbol, price = message.get("symbol"), message.get("ltp")
-                if not symbol or price is None:
-                    logger.debug("Ignoring message without symbol/ltp: %r", message)
-                    return
-                raw_ts = message.get("last_traded_time") or message.get("tt")
-                try:
-                    timestamp = datetime.fromtimestamp(float(raw_ts), tz=IST) if raw_ts else datetime.now(IST)
-                except (TypeError, ValueError, OSError, OverflowError):
-                    timestamp = datetime.now(IST)
-                updates.put(Tick(str(symbol), timestamp, Decimal(str(price)), 0))
+                if not tick.volume_valid:
+                    logger.debug("Volume not yet validated for %s; signals must abstain", tick.symbol)
+                updates.put(tick)
             except Exception:
                 logger.exception("Could not normalize FYERS message: %r", message)
 
